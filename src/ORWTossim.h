@@ -32,6 +32,7 @@ enum {
 	WAKE_PERIOD_MILLI = 1000,		//射频唤醒时长
 	WAKE_DELAY_MILLI = 500,			//有包收到之后延迟休眠的时长
 	SLEEP_PERIOD_MILLI = 1000,		//睡眠时长
+	MESSAGE_PRODUCE_RATIO = 0xA,	//产生数据包的节点比例，0xa表示10，即1/10
 };
 
 typedef nx_struct NeighborMsg {
@@ -40,6 +41,7 @@ typedef nx_struct NeighborMsg {
 	nx_uint8_t sourceid;		//该数据包的原始来源节点ID号，全局不变
 	nx_float forwardingrate;	//转发单步中的转发者（发出者）的转发率，局部使用
 	nx_float edc;				//转发单步中的转发者（发出者）的EDC值，局部使用
+	nx_uint16_t index;			//包序号
 } NeighborMsg;
 
 typedef nx_struct ProbeMsg {
@@ -62,6 +64,11 @@ typedef struct NeighborSetNode{
 	int overheadcount;//邻居节点在本节点中表现的属性：串听到邻居节点包的次数（本节点没有被该邻居节点选为转发节点）
 }NeighborSet;
 
-#define WEIGHT 0.1F    	//计算EDC时的weight值，去文中最好的经验值：0.1
+#define WEIGHT 0.1F    	  //计算EDC时的weight值，去文中最好的经验值：0.1
+#define DATATASK 0x1	  //掩码，是否处于发送数据包的过程中（自己产生的）
+#define INITIALIZED 0x2  //掩码，节点是否已经被初始化
+#define FORWARDTASK 0x4  //掩码，节点是否处在转发数据包的过程中（别人产生的）
+#define MSGSENDER 0x8    //掩码，节点是否具有周期发送数据的资格
+#define SLEEPALLOWED 0x10//掩码，是否允许休眠
 
 #endif /* ECOL_STATION_NEIGHBOUR_H */

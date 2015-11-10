@@ -19,7 +19,7 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
 Logs：
-	V0.2 
+	V0.4 采用掩码机制节省空间，简化配置 
 	
 Known Bugs: 
 		none.

@@ -35,8 +35,14 @@ lines = f.readlines()
 for line in lines:
   s = line.split()
   if (len(s) > 0):
-    if s[0] == "gain":
+    if s[0] == "gain" and int(s[1]) !=0  and int(s[2]) != 0:
       r.add(int(s[1]), int(s[2]), float(s[3]))
+'''    elif s[0] == "noise":
+      if int(s[1])>100:
+      	continue
+      m = t.getNode(int(s[1]));
+      m.addNoiseTraceReading(int(float(s[2])))'''
+
 
 noise = open("meyer-short.txt", "r")
 lines = noise.readlines()
@@ -63,7 +69,7 @@ t.addChannel("Probe", sys.stdout)
 t.addChannel("ORWTossimC", sys.stdout)
 #t.addChannel("Radio", sys.stdout)
 
-while (t.time() < 50000 * t.ticksPerSecond()):
+while (t.time() < 20000 * t.ticksPerSecond()):
   t.runNextEvent()
 
 print "Simulation completed."
