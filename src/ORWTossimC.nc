@@ -115,7 +115,7 @@ implementation {
 		btrpkt->index = ++index;
 		if((flags & DATATASK) != DATATASK){
 			flags |= DATATASK;
-			dbg("ORWTossimC", "Create & Send NeighborMsg...\n");
+			dbg("ORWTossimC", "%s Create & Send NeighborMsg...\n",sim_time_string());
 		}
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 	}
@@ -217,7 +217,6 @@ implementation {
 	
 	NeighborMsg* getmsgfrombuffer(uint8_t forwarderid) {
 		int i;
-		dbg("ORWTossimC", "Getting NeighborMsg from buffer...\n");
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 			if(forwardBuffer[i] != NULL && forwardBuffer[i]->forwarderid == forwarderid)
 				return forwardBuffer[i];
@@ -263,13 +262,12 @@ implementation {
 		NeighborMsg *neimsg = getmsgfrombuffer(forwarderid);
 		if(neimsg == NULL)
 			return;
-		dbg("ORWTossimC", "Ready to forward...\n");
 		memcpy(btrpkt, neimsg, sizeof(NeighborMsg));
 		btrpkt->forwarderid    = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->dstid          = 0xFF;
 		btrpkt->forwardingrate = getforwardingrate();
 		btrpkt->edc            = nodeedc;
-		dbg("ORWTossimC", "Forwarding packet from %d, source:%d...\n",btrpkt->forwarderid, btrpkt->sourceid);
+		dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d...\n",sim_time_string(),btrpkt->forwarderid, btrpkt->sourceid);
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 	}
 	
@@ -346,7 +344,7 @@ implementation {
 				return msg;
 			if(TOS_NODE_ID-1==0){
 				//sink 节点的处理
-				dbg("ORWTossimC", "Sink Node received a packet from %d,source:%d,index:%d.\n",btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
+				dbg("ORWTossimC", "%s Sink Node received a packet from %d,source:%d,index:%d.\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
 				sendforwardrequest(btrpkt2->forwarderid);
 				return msg;
 			}
@@ -402,11 +400,11 @@ implementation {
 	event void RadioControl.startDone(error_t err){
 		if(err != SUCCESS)
 			call RadioControl.start();
-		dbg("Radio", "RADIO STARTED.\n");
+		dbg("Radio", "%s RADIO STARTED.\n",sim_time_string());
 	}
 
 	event void RadioControl.stopDone(error_t error){
-		dbg("Radio", "RADIO STOPED.\n");
+		dbg("Radio", "%s RADIO STOPED.\n",sim_time_string());
 	}
 		
 

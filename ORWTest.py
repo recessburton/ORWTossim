@@ -5,7 +5,7 @@
  Created on  2015-10-28 15:39
  
  @author: ytc recessburton@gmail.com
- @version: 0.1
+ @version: 0.4
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -69,7 +69,7 @@ t.addChannel("Probe", sys.stdout)
 t.addChannel("ORWTossimC", sys.stdout)
 #t.addChannel("Radio", sys.stdout)
 
-while (t.time() < 20000 * t.ticksPerSecond()):
+while (t.time() < 70000 * t.ticksPerSecond()):
   t.runNextEvent()
 
 print "Simulation completed."
