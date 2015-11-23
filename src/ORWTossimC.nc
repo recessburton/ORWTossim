@@ -4,7 +4,7 @@
  Created on  2015-10-16 14:15
  
  @author: ytc recessburton@gmail.com
- @version: 0.4
+ @version: 0.5
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -49,6 +49,7 @@ implementation {
 	uint8_t glbforwarderid = 0;
 	volatile float nodeedc;
 	uint16_t index = 0;	//数据包序号
+	uint8_t receptalltrigger=0;//接受一切转发请求的计数器，达到RECEPTALLTHRE阈值后，接受所有转发请求.（避免过多拒绝不在转发表中的节点，导致网络延迟增加）
 
 /*位运算之掩码使用：
  * 打开位： flags = flags | MASK
@@ -86,9 +87,9 @@ implementation {
 	}
 	
 	float getforwardingrate() {
-		//float forwardingreate = 1.0f*forwardCount/(packetCount==0?1:packetCount);
-		float forwardingreate = 1.0f/(forwardCount>0?forwardCount:1);
-		return (forwardingreate == 0) ? 1.0f:forwardingreate;	
+		//float forwardingrate = 1.0f*forwardCount/(packetCount==0?1:packetCount);
+		float forwardingrate = 1.0f/(forwardCount>0?forwardCount:1);
+		return (forwardingrate == 0) ? 1.0f:forwardingrate;
 	}
 	
 	task void sendProbe() {
@@ -107,16 +108,19 @@ implementation {
 		NeighborMsg * btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt, sizeof(NeighborMsg)));
 		if(btrpkt == NULL)
 			return;
+		if((flags & DATATASK) != DATATASK){
+			flags |= DATATASK;
+			dbg("ORWTossimC", "%s Create & Send NeighborMsg...\n",sim_time_string());
+			index++;
+			//forwardCount++;
+		}
+		forwardCount++;
 		btrpkt->dstid = 0xFF;
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->forwarderid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->forwardingrate = getforwardingrate();
 		btrpkt->edc = nodeedc;
-		btrpkt->index = ++index;
-		if((flags & DATATASK) != DATATASK){
-			flags |= DATATASK;
-			dbg("ORWTossimC", "%s Create & Send NeighborMsg...\n",sim_time_string());
-		}
+		btrpkt->index = index;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 	}
 	
@@ -161,16 +165,21 @@ implementation {
 		}
 	}
 	
-	void updateSet(uint8_t nodeid, float edc, float forwardingrate){
-		int i;
+	void updateSet(uint8_t nodeid, float edc, float forwardingrate, bool isprobe){
+		int i,j=1;
 		if(neighborSetSize >= MAX_NEIGHBOR_NUM)
 			return;
 		for(i = 0;i<neighborSetSize;i++){
 			if(neighborSet[i].nodeID == nodeid){
 				//链路质量计算：从该节点串听到的包率/邻居包头部中的节点平均包转发率
 				//其中：串听到的包率=1/串听到的包数
-				neighborSet[i].overheadcount += 1;
-				neighborSet[i].p = 1.0f/neighborSet[i].overheadcount/forwardingrate;
+				if(!isprobe){
+					neighborSet[i].overheadcount += 1;
+					j=0;
+				}else
+					dbg("ORWTossimC", "is Probe!.\n");	
+				neighborSet[i].p = 1.0f/(1.0f/neighborSet[i].overheadcount/forwardingrate);
+				dbg("ORWTossimC", "Update p node %d oh:%d, fc:%f.\n",nodeid,neighborSet[i].overheadcount, 1.0f/forwardingrate);
 				neighborSet[i].edc = edc;
 				//按照EDC值升序排序
 				qsort(neighborSet,neighborSetSize,sizeof(NeighborSet),edccmp);
@@ -204,14 +213,18 @@ implementation {
 		int i;
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 			if(forwardBuffer[i] == NULL)
-			{
+			{	//此buffer位置无内容
 				atomic {
 					forwardBuffer[i] = (NeighborMsg*)malloc(sizeof(NeighborMsg));
 					if(forwardBuffer[i]==NULL)
 						return;
 					memcpy(forwardBuffer[i],neimsg,sizeof(NeighborMsg)); 
 				}
+			}else if(forwardBuffer[i]->forwarderid == neimsg->forwarderid){
+				//此buffer位置已有该节点内容
+				return;
 			}
+			//此buffer位置有其它内容，继续下一个位置的遍历
 		}
 	}
 	
@@ -262,6 +275,7 @@ implementation {
 		NeighborMsg *neimsg = getmsgfrombuffer(forwarderid);
 		if(neimsg == NULL)
 			return;
+		forwardCount++;
 		memcpy(btrpkt, neimsg, sizeof(NeighborMsg));
 		btrpkt->forwarderid    = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->dstid          = 0xFF;
@@ -289,6 +303,12 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		if(sourceid == 1)
 			rst = TRUE;
+		if(rst)
+			receptalltrigger = 0;
+		else if(receptalltrigger>=RECEPTALLTHRE)
+			rst = TRUE;
+		else
+			receptalltrigger += 1;
 		btrpkt->forwardcontrol = rst ? 0x2 : 0x3;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));	
 		if(rst && ((flags&DATATASK)==DATATASK)) {			//产生的包被成功转发后，准备下一次数据发送
@@ -318,7 +338,7 @@ implementation {
 			ProbeMsg* btrpkt1 = (ProbeMsg*) payload;
 			if(btrpkt1->dstid - TOS_NODE_ID == 0) {
 				//接到自己probe包的回包
-				updateSet(btrpkt1->sourceid, btrpkt1->edc, 1.0f);
+				updateSet(btrpkt1->sourceid, btrpkt1->edc, 1.0f, TRUE);
 				dbg("Probe", "Received ACK from %d.\n",btrpkt1->sourceid);
 				flags |= INITIALIZED;
 				return msg;
@@ -352,10 +372,9 @@ implementation {
 			//接到一个包，更新，存入缓冲，发送转发请求
 			if(qualify(btrpkt2->forwarderid))	//如果该节点是本节点的下一跳，则无需做任何处理（不用为它转发数据包）
 				return msg;
-			packetCount++;
-			updateSet(btrpkt2->forwarderid, btrpkt2->edc, btrpkt2->forwardingrate);
+			updateSet(btrpkt2->forwarderid, btrpkt2->edc, btrpkt2->forwardingrate,FALSE);
 			dbg("ORWTossimC", "Received a packet from %d, source:%d, sending forward request...\n",btrpkt2->forwarderid,btrpkt2->sourceid);
-			if((flags&DATATASK) != DATATASK) {
+			if(((flags&DATATASK) != DATATASK)&&((flags&FORWARDTASK) != FORWARDTASK)) {
 				addtobuffer(btrpkt2);
 				sendforwardrequest(btrpkt2->forwarderid);
 			}
@@ -367,7 +386,6 @@ implementation {
 			if(btrpkt3->forwardcontrol == 0x1){
 				//收到某个转发请求
 				if(btrpkt3->dstid - TOS_NODE_ID == 0){
-					forwardCount++;
 					dbg("ORWTossimC", "Received forward request from %d, QUALIFYING...\n",btrpkt3->sourceid);
 					sendresponse(btrpkt3->sourceid,qualify(btrpkt3->sourceid));
 				}
@@ -375,12 +393,11 @@ implementation {
 			}else if(btrpkt3->forwardcontrol == 0x2){
 				//收到某个同意转发的包
 				if(btrpkt3->dstid - TOS_NODE_ID == 0){
-					forwardCount++;
 					dbg("ORWTossimC", "Forwarding permitted from %d, FORWARDING...\n",btrpkt3->sourceid);
-					forward(btrpkt3->sourceid);
 					glbforwarderid = btrpkt3->sourceid;
 					flags |= FORWARDTASK;
-					call packetTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
+					forward(btrpkt3->sourceid);
+					call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
 				}
 				return msg;
 			}else if(btrpkt3->forwardcontrol == 0x3){

@@ -65,6 +65,7 @@ typedef struct NeighborSetNode{
 }NeighborSet;
 
 #define WEIGHT 0.1F    	  //计算EDC时的weight值，去文中最好的经验值：0.1
+#define RECEPTALLTHRE 3  //数据包转发请求接受阈值，达到该阈值后，允许一切转发请求（避免多次拒绝不在转发表中的节点，导致网络延迟增加）
 #define DATATASK 0x1	  //掩码，是否处于发送数据包的过程中（自己产生的）
 #define INITIALIZED 0x2  //掩码，节点是否已经被初始化
 #define FORWARDTASK 0x4  //掩码，节点是否处在转发数据包的过程中（别人产生的）
