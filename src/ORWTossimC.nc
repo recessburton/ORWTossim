@@ -179,7 +179,7 @@ implementation {
 				}else
 					dbg("ORWTossimC", "is Probe!.\n");	
 				neighborSet[i].p = 1.0f/(1.0f/neighborSet[i].overheadcount/forwardingrate);
-				dbg("ORWTossimC", "Update p node %d oh:%d, fc:%f.\n",nodeid,neighborSet[i].overheadcount, 1.0f/forwardingrate);
+				//dbg("ORWTossimC", "Update p node %d oh:%d, fc:%f.\n",nodeid,neighborSet[i].overheadcount, 1.0f/forwardingrate);
 				neighborSet[i].edc = edc;
 				//按照EDC值升序排序
 				qsort(neighborSet,neighborSetSize,sizeof(NeighborSet),edccmp);
