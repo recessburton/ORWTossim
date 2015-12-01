@@ -26,12 +26,12 @@ inline float __nesc_hton_afloat(void *COUNT(sizeof(float)) target, float value) 
 enum {
 	ORWMSG = 19,					//无线信道号
 	MAX_NEIGHBOR_NUM = 20,			//最大邻居数
-	PROBE_PERIOD_MILLI = 500,		//探测包发送间隔
-	PACKET_PERIOD_MILLI = 32222,	//数据包产生间隔
+	PROBE_PERIOD_MILLI = 400,		//探测包发送间隔
+	PACKET_PERIOD_MILLI = 602222,	//数据包产生间隔
 	PACKET_DUPLICATE_MILLI = 300,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则回复长发包间隔
 	WAKE_PERIOD_MILLI = 1000,		//射频唤醒时长
 	WAKE_DELAY_MILLI = 500,			//有包收到之后延迟休眠的时长
-	SLEEP_PERIOD_MILLI = 1000,		//睡眠时长
+	SLEEP_PERIOD_MILLI = 2000,		//睡眠时长
 	MESSAGE_PRODUCE_RATIO = 0xA,	//产生数据包的节点比例，0xa表示10，即1/10
 };
 

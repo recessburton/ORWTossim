@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2015, YTC, www.bjfulinux.cn
  Copyright (C),2014-2015, ENS Lab, ens.bjfu.edu.cn
- Created on  2015-10-16 14:15
+ Created on  2015-11-30 13:58
  
  @author: ytc recessburton@gmail.com
- @version: 0.5
+ @version: 0.6
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -122,6 +122,7 @@ implementation {
 		btrpkt->edc = nodeedc;
 		btrpkt->index = index;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
+		call wakeTimer.stop();	//关闭休眠，等待转发请求
 	}
 	
 	event void packetTimer.fired() {
@@ -202,7 +203,7 @@ implementation {
 	}
 
 	event void AMSend.sendDone(message_t * msg, error_t err) {
-		if((flags&SLEEPALLOWED) == SLEEPALLOWED){
+		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
 			call wakeTimer.stop();
 			if(TOS_NODE_ID !=1)
 				call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//重置休眠触发时钟，向后延迟一段时间
@@ -283,6 +284,7 @@ implementation {
 		btrpkt->edc            = nodeedc;
 		dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d...\n",sim_time_string(),btrpkt->forwarderid, btrpkt->sourceid);
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
+		call wakeTimer.stop();	//停止休眠，等待转发请求
 	}
 	
 	bool qualify(uint8_t sourceid) {
@@ -293,34 +295,6 @@ implementation {
 				return neighborSet[i].use;
 		}
 		return FALSE;
-	}
-	
-	void sendresponse(uint8_t sourceid, bool rst) {
-		ControlMsg * btrpkt = (ControlMsg * )(call Packet.getPayload(&pkt,sizeof(ControlMsg)));
-		if(btrpkt == NULL)
-			return;
-		btrpkt->dstid = (nx_int8_t)sourceid;
-		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
-		if(sourceid == 1)
-			rst = TRUE;
-		if(rst)
-			receptalltrigger = 0;
-		else if(receptalltrigger>=RECEPTALLTHRE)
-			rst = TRUE;
-		else
-			receptalltrigger += 1;
-		btrpkt->forwardcontrol = rst ? 0x2 : 0x3;
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));	
-		if(rst && ((flags&DATATASK)==DATATASK)) {			//产生的包被成功转发后，准备下一次数据发送
-			flags &= ~DATATASK;
-			call packetTimer.stop();
-			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
-		}
-		if(rst && ((flags&FORWARDTASK)==FORWARDTASK)) {			//转发的包被成功转发
-			flags &= ~FORWARDTASK;
-			call forwardpacketTimer.stop();
-			deletefrombuffer(sourceid);
-		}
 	}
 
 	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {
@@ -381,30 +355,28 @@ implementation {
 			return msg;
 		}
 		if(len == sizeof(ControlMsg)){
-			//控制信息包处理
+			//转发请求控制信息包处理
 			ControlMsg* btrpkt3 = (ControlMsg*) payload;
 			if(btrpkt3->forwardcontrol == 0x1){
 				//收到某个转发请求
 				if(btrpkt3->dstid - TOS_NODE_ID == 0){
-					dbg("ORWTossimC", "Received forward request from %d, QUALIFYING...\n",btrpkt3->sourceid);
-					sendresponse(btrpkt3->sourceid,qualify(btrpkt3->sourceid));
-				}
-				return msg;
-			}else if(btrpkt3->forwardcontrol == 0x2){
-				//收到某个同意转发的包
-				if(btrpkt3->dstid - TOS_NODE_ID == 0){
-					dbg("ORWTossimC", "Forwarding permitted from %d, FORWARDING...\n",btrpkt3->sourceid);
-					glbforwarderid = btrpkt3->sourceid;
-					flags |= FORWARDTASK;
-					forward(btrpkt3->sourceid);
-					call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
-				}
-				return msg;
-			}else if(btrpkt3->forwardcontrol == 0x3){
-				//收到某个不同意转发的包
-				if(btrpkt3->dstid -TOS_NODE_ID == 0){
-					dbg("ORWTossimC", "Forwarding denied from %d, DISCARD.\n",btrpkt3->sourceid);
-					deletefrombuffer(btrpkt3->sourceid);
+					dbg("ORWTossimC", "Received forward request from %d, Stop sending MSG\n",btrpkt3->sourceid);
+					//有人转发了数据包，停止周期性发送
+					if((flags&DATATASK)==DATATASK) {		    //若为本节点产生的包被成功转发，准备下一次数据发送
+						flags &= ~DATATASK;
+						call packetTimer.stop();
+						call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
+					}
+					if((flags&FORWARDTASK)==FORWARDTASK) {		//转发的包被成功转发
+						flags &= ~FORWARDTASK;
+						call forwardpacketTimer.stop();
+						deletefrombuffer(btrpkt3->sourceid);
+					}
+					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
+						call wakeTimer.stop();
+						if(TOS_NODE_ID !=1)
+							call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//恢复休眠触发时钟，向后延迟一段时间
+					}
 				}
 				return msg;
 			}else{

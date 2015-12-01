@@ -19,6 +19,7 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
 Logs：
+	V0.6 从Master分新的Brantch：PureORW，更改了转发授权机制，由原来的根据对方EDC值判断转发资格改为先请求先同意的转发策略，纯粹的机会路由
 	V0.5 修正bug #1
 	V0.4 采用掩码机制节省空间，简化配置 
 	
