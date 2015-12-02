@@ -4,7 +4,7 @@
  Created on  2015-11-30 13:58
  
  @author: ytc recessburton@gmail.com
- @version: 0.6
+ @version: 0.7
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

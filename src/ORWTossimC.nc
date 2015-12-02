@@ -4,7 +4,7 @@
  Created on  2015-11-30 13:58
  
  @author: ytc recessburton@gmail.com
- @version: 0.6
+ @version: 0.7
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -210,7 +210,8 @@ implementation {
 		}
 	}
 	
-	void addtobuffer(NeighborMsg* neimsg) {
+	int addtobuffer(NeighborMsg* neimsg) {
+		//返回值：-1 加入失败；0 已有相同的包加入，duplicate；1 加入成功
 		int i;
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 			if(forwardBuffer[i] == NULL)
@@ -218,15 +219,22 @@ implementation {
 				atomic {
 					forwardBuffer[i] = (NeighborMsg*)malloc(sizeof(NeighborMsg));
 					if(forwardBuffer[i]==NULL)
-						return;
+						return -1;
 					memcpy(forwardBuffer[i],neimsg,sizeof(NeighborMsg)); 
+					return 1;
 				}
 			}else if(forwardBuffer[i]->forwarderid == neimsg->forwarderid){
 				//此buffer位置已有该节点内容
-				return;
+				if (forwardBuffer[i]->index == neimsg->index)
+					return 0;
+				else{
+					memcpy(forwardBuffer[i],neimsg,sizeof(NeighborMsg)); 
+					return 1;
+				}
 			}
 			//此buffer位置有其它内容，继续下一个位置的遍历
 		}
+		return -1;
 	}
 	
 	NeighborMsg* getmsgfrombuffer(uint8_t forwarderid) {
@@ -343,14 +351,20 @@ implementation {
 				return msg;
 			}
 			//其它节点的处理
-			//接到一个包，更新，存入缓冲，发送转发请求
+			//接到一个包，更新，存入缓冲，判断是否为duplicate，是则丢弃，否则转发，并发送转发请求(即ack)
 			if(qualify(btrpkt2->forwarderid))	//如果该节点是本节点的下一跳，则无需做任何处理（不用为它转发数据包）
 				return msg;
 			updateSet(btrpkt2->forwarderid, btrpkt2->edc, btrpkt2->forwardingrate,FALSE);
-			dbg("ORWTossimC", "Received a packet from %d, source:%d, sending forward request...\n",btrpkt2->forwarderid,btrpkt2->sourceid);
 			if(((flags&DATATASK) != DATATASK)&&((flags&FORWARDTASK) != FORWARDTASK)) {
-				addtobuffer(btrpkt2);
-				sendforwardrequest(btrpkt2->forwarderid);
+				if(addtobuffer(btrpkt2)>=1){
+					sendforwardrequest(btrpkt2->forwarderid);
+					//转发
+					dbg("ORWTossimC", "Received a packet from %d, source:%d, sending ack & forwarding...\n",btrpkt2->forwarderid,btrpkt2->sourceid);
+					glbforwarderid = btrpkt2->forwarderid;
+					flags |= FORWARDTASK;
+					forward(btrpkt2->forwarderid);
+					call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
+				}
 			}
 			return msg;
 		}

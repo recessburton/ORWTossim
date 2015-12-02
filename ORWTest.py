@@ -1,11 +1,11 @@
 #!/usr/bin/python
 '''
  Copyright (C),2014-2015, YTC, www.bjfulinux.cn
- Copyright (C),2014-2015, ENS Group, ens.bjfu.edu.cn
- Created on  2015-10-28 15:39
+ Copyright (C),2014-2015, ENS Lab, ens.bjfu.edu.cn
+ Created on  2015-11-30 13:58
  
  @author: ytc recessburton@gmail.com
- @version: 0.4
+ @version: 0.7
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -70,7 +70,7 @@ t.addChannel("ORWTossimC", sys.stdout)
 f1 = open("logs_radio","w")
 t.addChannel("Radio", f1)
 
-while (t.time() < 500000 * t.ticksPerSecond()):
+while (t.time() < 200000 * t.ticksPerSecond()):
   t.runNextEvent()
 
 print "Simulation completed."
