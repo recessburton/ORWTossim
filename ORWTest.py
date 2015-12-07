@@ -70,7 +70,7 @@ t.addChannel("ORWTossimC", sys.stdout)
 f1 = open("logs_radio","w")
 t.addChannel("Radio", f1)
 
-while (t.time() < 200000 * t.ticksPerSecond()):
+while (t.time() < 500000 * t.ticksPerSecond()):
   t.runNextEvent()
 
 print "Simulation completed."

@@ -19,6 +19,8 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
 Logs：
+	V0.8 a.数据包加入buffer和删除的标准改为sourceid是否重复（而且index更大），原为forwardid，不妥
+	     b.forward过程加入队列机制，使得节点可以同时承担多个不同数据包的转发任务
 	V0.7 完善转发判断机制，按照ORW，只有非Duplicate的包才转发
 	V0.6 从Master分新的Brantch：PureORW，更改了转发授权机制，由原来的根据对方EDC值判断转发资格改为先请求先同意的转发策略，纯粹的机会路由
 	V0.5 修正bug #1

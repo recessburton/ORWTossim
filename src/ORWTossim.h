@@ -1,5 +1,5 @@
-#ifndef ECOL_STATION_NEIGHBOUR_H
-#define ECOL_STATION_NEIGHBOUR_H
+#ifndef ORW_TOSSIM_H
+#define ORW_TOSSIM_H
 
 /*===============复制/opt/tinyos-2.1.2/tos/chips/atm128/atm128hardware.h 中的申明，否则sim编译nx_float出错！！*/
 
@@ -54,6 +54,7 @@ typedef nx_struct ControlMsg {
 	nx_uint8_t dstid;
 	nx_uint8_t sourceid;
 	nx_uint8_t forwardcontrol;	//转发者身份请求，节点收到邻居的节点包后，发送0x1转发者身份请求，发出者判断并回应0x2:同意，0x3:拒绝。
+	nx_uint8_t msgsource;		//请求转发的数据包中的源id
 }ControlMsg;
 
 typedef struct NeighborSetNode{
@@ -72,4 +73,4 @@ typedef struct NeighborSetNode{
 #define MSGSENDER 0x8    //掩码，节点是否具有周期发送数据的资格
 #define SLEEPALLOWED 0x10//掩码，是否允许休眠
 
-#endif /* ECOL_STATION_NEIGHBOUR_H */
+#endif /* ORW_TOSSIM_H */
