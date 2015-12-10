@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2015, YTC, www.bjfulinux.cn
  Copyright (C),2014-2015, ENS Lab, ens.bjfu.edu.cn
- Created on  2015-12-7 14:15
+ Created on  2015-12-10 16:15
  
  @author: ytc recessburton@gmail.com
- @version: 0.8
+ @version: 0.9
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <float.h>
 #include "ORWTossim.h"
-#include "queue.h"
 
 module ORWTossimC @safe(){
 	uses interface Boot;
@@ -43,18 +42,21 @@ implementation {
 	NeighborSet neighborSet[MAX_NEIGHBOR_NUM];
 	int neighborSetSize=0;
 	int forwardCount=0; //由本节点负责转发的数据包总数，用于计算放在包头中的forwardingrate
+	int forwardreplicacount=0;//转发重复计数
+	int msgreplicacount=0;//数据包发送重复计数
 	message_t pkt,packet;
 	NeighborMsg *forwardBuffer[MAX_NEIGHBOR_NUM];//数据包缓冲区，暂存待判定的包
+	uint8_t glbforwardmsgid = 0;
 	unsigned char flags;//标志位，与掩码运算可知相应位置是否置位
 	volatile float nodeedc;
 	volatile uint16_t index = 0;	//数据包序号
-	struct forwardtasklist{  //'sys/queue.h'链表使用：http://www.thinksaas.cn/group/topic/347706/
-	    int bufferindex;  
-	    LIST_ENTRY(forwardtasklist)  list_entry;
-	}; 
-	//构造链表头
-    LIST_HEAD(list_head, forwardtasklist) head;
+	typedef struct overheadcountlist{
+		uint8_t nodeid;
+		int count;
+		float forwardingrate;
+	}overheadcountlist;
 	
+	overheadcountlist ocl[MAX_NEIGHBOR_NUM];//overhead计数表，记录overhead到某个节点的次数，用于计算Linkquality
 
 /*位运算之掩码使用：
  * 打开位： flags = flags | MASK
@@ -80,14 +82,11 @@ implementation {
 			neighborSet[i].edc = 1.0f;
 			neighborSet[i].p = 1.0f;
 			neighborSet[i].use = FALSE;
-			neighborSet[i].overheadcount = 0;
 		}
 		nodeedc = (TOS_NODE_ID ==1) ? 0.0f : FLT_MAX;
 		//初始化buffer
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++)
-			forwardBuffer[i] == NULL;
-		//构造队列
-		LIST_INIT(&head);
+			forwardBuffer[i] = NULL;
 	}
 	
 	float getforwardingrate() {
@@ -101,14 +100,24 @@ implementation {
 			return;
 		btrpkt->dstid = 0xFF;
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
-		btrpkt->edc = nodeedc;
+		btrpkt->edc = 0;
+		btrpkt->linkq = 0;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 		dbg("Probe", "Probe Send done.\n");
 	}
 	
 	task void sendMsg() {
 		//周期产生数据包
-		NeighborMsg * btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt, sizeof(NeighborMsg)));
+		NeighborMsg * btrpkt = NULL;
+		if(msgreplicacount > MAX_REPLICA_COUNT){
+			msgreplicacount = 0;
+			flags &= ~DATATASK;
+			call packetTimer.stop();
+			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
+			return;
+		}
+		msgreplicacount ++;
+		btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt, sizeof(NeighborMsg)));
 		if(btrpkt == NULL)
 			return;
 		if((flags & DATATASK) != DATATASK){
@@ -122,8 +131,8 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->forwarderid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->forwardingrate = getforwardingrate();
-		btrpkt->edc = nodeedc;
 		btrpkt->index = index;
+		btrpkt->edc=nodeedc;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 		call wakeTimer.stop();	//关闭休眠，等待转发请求
 	}
@@ -164,40 +173,32 @@ implementation {
 		//打印邻居集，判定forwarderSet资格
 		dbg("ORWTossimC", "The node EDC is %f.\n",nodeedc);
 		for(i = 0;i<neighborSetSize;i++){
-			neighborSet[i].use = (neighborSet[i].edc < (nodeedc - WEIGHT)) ? TRUE : FALSE;
+			neighborSet[i].use = (neighborSet[i].edc <= (nodeedc - WEIGHT)) ? TRUE : FALSE;
 			//dbg("ORWTossimC", "NeighborSet #%d:Node %d, EDC %f, LQ %f, is use:%d\n",i+1,neighborSet[i].nodeID,neighborSet[i].edc,neighborSet[i].p,neighborSet[i].use);
 		}
 	}
 	
-	void updateSet(uint8_t nodeid, float edc, float forwardingrate, bool isprobe){
-		int i,j=1;
+	void updateSet(uint8_t nodeid, float edc, float linkq){
+		int i;
 		if(neighborSetSize >= MAX_NEIGHBOR_NUM)
 			return;
 		for(i = 0;i<neighborSetSize;i++){
 			if(neighborSet[i].nodeID == nodeid){
-				//链路质量计算：从该节点串听到的包率/邻居包头部中的节点平均包转发率
-				//其中：串听到的包率=1/串听到的包数
-				if(!isprobe){
-					neighborSet[i].overheadcount += 1;
-					j=0;
-				}else
-					dbg("ORWTossimC", "is Probe!.\n");	
-				neighborSet[i].p = 1.0f/(1.0f/neighborSet[i].overheadcount/forwardingrate);
-				//dbg("ORWTossimC", "Update p node %d oh:%d, fc:%f.\n",nodeid,neighborSet[i].overheadcount, 1.0f/forwardingrate);
-				neighborSet[i].edc = edc;
-				//按照EDC值升序排序
-				qsort(neighborSet,neighborSetSize,sizeof(NeighborSet),edccmp);
-				if(TOS_NODE_ID != 1)
-					post updateEDC();
-				return;
+			neighborSet[i].p = linkq;
+			//dbg("ORWTossimC", "Update p node %d oh:%d, fc:%f.\n",nodeid,neighborSet[i].overheadcount, 1.0f/forwardingrate);
+			neighborSet[i].edc = edc;
+			//按照EDC值升序排序
+			qsort(neighborSet,neighborSetSize,sizeof(NeighborSet),edccmp);
+			if(TOS_NODE_ID != 1)
+				post updateEDC();
+			return;
 			}
 		}
 		//运行到此处说明转发节点集中尚无此节点，加入
 		neighborSet[i].nodeID = nodeid;
 		neighborSet[i].edc = edc;
-		neighborSet[i].p = 1.0f;
-		neighborSet[i].overheadcount = 1;
-		neighborSet[i].use = (neighborSet[i].edc < nodeedc) ? TRUE : FALSE;
+		neighborSet[i].p = linkq;
+		neighborSet[i].use = (neighborSet[i].edc <= (nodeedc - WEIGHT)) ? TRUE : FALSE;
 		neighborSetSize++;
 		//按照EDC值升序排序
 		qsort(neighborSet,neighborSetSize,sizeof(NeighborSet),edccmp);
@@ -240,20 +241,49 @@ implementation {
 		return -1;
 	}
 	
-	void deletefrombuffer(uint8_t sourceid) {
+	NeighborMsg* getmsgfrombuffer(uint8_t sourceid) {
 		int i;
-		struct forwardtasklist *forwardmsg = (struct forwardtasklist *)calloc(1, sizeof(struct forwardtasklist));  
+		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
+			if(forwardBuffer[i] != NULL && forwardBuffer[i]->sourceid == sourceid)
+				return forwardBuffer[i];
+		}
+		return NULL;
+	}
+	
+	void deletefrombuffer(uint8_t sourceid) {
+		int i; 
 		atomic {
 			for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 				if(forwardBuffer[i] != NULL && forwardBuffer[i]->sourceid == sourceid) {
 					free(forwardBuffer[i]);
 					forwardBuffer[i] = NULL;
-					forwardmsg->bufferindex = i;
-					LIST_REMOVE(forwardmsg, list_entry);
 					return;
 				}
 			}
 		}
+	}
+	
+	void updateOCL(uint8_t nodeid, float forwardingrate){
+		int i;
+		bool found = FALSE;
+		for(i=0;i<MAX_NEIGHBOR_NUM && !found;i++){
+			if(ocl[i].nodeid == nodeid){
+				found = TRUE;
+				ocl[i].count ++;
+				ocl[i].forwardingrate = forwardingrate;
+			}
+		}
+	}
+	
+	float getLinkQ(uint8_t nodeid){
+		int i;
+		bool found = FALSE;
+		for(i=0;i<MAX_NEIGHBOR_NUM && !found;i++){
+			if(ocl[i].nodeid == nodeid){
+				return 1.0f/(1.0f/ocl[i].count/ocl[i].forwardingrate);
+			}
+		}
+		return -1;	
 	}
 	
 	void sendACK(uint8_t sourceid) {
@@ -263,6 +293,7 @@ implementation {
 		btrpkt->dstid = (nx_int8_t)sourceid;
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->edc = (nx_float)nodeedc;
+		btrpkt->linkq = 1;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
 	
@@ -274,41 +305,35 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->forwardcontrol = 0x1;
 		btrpkt->msgsource = msgsource;
+		btrpkt->edc = nodeedc;
+		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "Sending ACK to %d...\n",forwarderid);
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 	}
 	
-	void forward() {
-		struct forwardtasklist *queuedata = NULL;
+	task void forward() {
 		NeighborMsg *btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt,sizeof(NeighborMsg)));
 		NeighborMsg *neimsg = NULL;
-		LIST_FOREACH(queuedata, &head, list_entry) {
-			neimsg = forwardBuffer[queuedata->bufferindex];
-			if(neimsg == NULL)
-				return;
-			forwardCount++;
-			memcpy(btrpkt, neimsg, sizeof(NeighborMsg));
-			btrpkt->forwarderid    = (nx_int8_t)TOS_NODE_ID;
-			btrpkt->dstid          = 0xFF;
-			btrpkt->forwardingrate = getforwardingrate();
-			btrpkt->edc            = nodeedc;
-			if((flags&FORWARDTASK)!=FORWARDTASK) {
-				flags |= FORWARDTASK;
-				dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d, index:%d...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index);
-			}
-			call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
-			call wakeTimer.stop();	//停止休眠，等待转发请求
+		neimsg = getmsgfrombuffer(glbforwardmsgid);
+		if(neimsg == NULL)
+			return;
+		forwardCount++;
+		memcpy(btrpkt, neimsg, sizeof(NeighborMsg));
+		btrpkt->forwarderid    = (nx_int8_t)TOS_NODE_ID;
+		btrpkt->dstid          = 0xFF;
+		btrpkt->forwardingrate = getforwardingrate();
+		btrpkt->edc            = nodeedc;
+		if((flags&FORWARDTASK)!=FORWARDTASK) {
+			flags |= FORWARDTASK;
+			dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d, index:%d...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index);
 		}
+		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
+		call wakeTimer.stop();	//停止休眠，等待转发请求
 	}
 	
-	bool qualify(uint8_t sourceid) {
-		//判断节点是否在转发表中（具有转发资格）
-		int i;
-		for(i = 0;i<neighborSetSize;i++){
-			if(neighborSet[i].nodeID == sourceid)
-				return neighborSet[i].use;
-		}
-		return FALSE;
+	bool qualify(float edc) {
+		//判断接到的包需不需要被转发，edc比本节点转发的代价小，则不需要转发；否则，由本节点转发更合适
+		return (edc <= (nodeedc - WEIGHT)) ? FALSE : TRUE;
 	}
 
 	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {
@@ -316,8 +341,6 @@ implementation {
 		 * 另外，在用sizeof计算结构体长度时，本应注意字节对齐问题，比如第一个成员为uint8_t，第二个成员为uint16_t，则其长度为32
 		 * 但此处用到的是网络类型数据nx_，不存在这种情况，结构体在内存中存储是无空隙的。
 		 * */
-		int bufferindex=0;
-		struct forwardtasklist *forwardmsg = NULL;
 		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&INITIALIZED) != INITIALIZED)){
 			call wakeTimer.stop();
 			if(TOS_NODE_ID !=1)
@@ -328,7 +351,7 @@ implementation {
 			ProbeMsg* btrpkt1 = (ProbeMsg*) payload;
 			if(btrpkt1->dstid - TOS_NODE_ID == 0) {
 				//接到自己probe包的回包
-				updateSet(btrpkt1->sourceid, btrpkt1->edc, 1.0f, TRUE);
+				updateSet(btrpkt1->sourceid, btrpkt1->edc, 1.0f);
 				dbg("Probe", "Received ACK from %d.\n",btrpkt1->sourceid);
 				flags |= INITIALIZED;
 				if((flags&SLEEPALLOWED) == SLEEPALLOWED){
@@ -365,19 +388,16 @@ implementation {
 			}
 			//其它节点的处理
 			//接到一个包，更新，存入缓冲，判断是否为duplicate，是则丢弃，否则转发，并发送转发请求(即ack)
-			if(qualify(btrpkt2->forwarderid))	//如果该节点是本节点的下一跳，则无需做任何处理（不用为它转发数据包）
+			updateOCL(btrpkt2->forwarderid,btrpkt2->forwardingrate);
+			if(!qualify(btrpkt2->edc))	//如果该节点的数据包值不值得被转发
 				return msg;
-			if((bufferindex = addtobuffer(btrpkt2))>=0){
-				updateSet(btrpkt2->forwarderid, btrpkt2->edc, btrpkt2->forwardingrate,FALSE);
+			if(((flags&DATATASK) != DATATASK)&&((flags&FORWARDTASK) != FORWARDTASK)) {
 				sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
-				//加入转发列表
-				forwardmsg = (struct forwardtasklist *)calloc(1, sizeof(struct forwardtasklist));  
-    			forwardmsg->bufferindex = bufferindex;
-    			LIST_INSERT_HEAD(&head, forwardmsg, list_entry); 
-				//转发
+				if(!addtobuffer(btrpkt2))
+					return msg;
 				dbg("ORWTossimC", "Received a packet from %d, source:%d, index:%d, sending ack & forwarding...\n",btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
-				forward();
-				call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
+				glbforwardmsgid = btrpkt2->sourceid;
+				post forward();
 			}
 			return msg;
 		}
@@ -387,6 +407,7 @@ implementation {
 			if(btrpkt3->forwardcontrol == 0x1){
 				//收到某个转发请求
 				if(btrpkt3->dstid - TOS_NODE_ID == 0){
+					updateSet(btrpkt3->sourceid, btrpkt3->edc, btrpkt3->linkq);
 					dbg("ORWTossimC", "Received forward request from %d, Stop sending MSG\n",btrpkt3->sourceid);
 					//有人转发了数据包，停止周期性发送
 					if((flags&DATATASK)==DATATASK) {		    //若为本节点产生的包被成功转发，准备下一次数据发送
@@ -396,10 +417,8 @@ implementation {
 					}
 					if((flags&FORWARDTASK)==FORWARDTASK) {		//转发的包被成功转发
 						deletefrombuffer(btrpkt3->msgsource);
-						if (LIST_EMPTY(&head)){
-							flags &= ~FORWARDTASK;
-							call forwardpacketTimer.stop();
-						}
+						flags &= ~FORWARDTASK;
+						call forwardpacketTimer.stop();
 						
 					}
 					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
@@ -440,7 +459,15 @@ implementation {
 	}
 	
 	event void forwardpacketTimer.fired(){
-		forward();
+		if(forwardreplicacount > MAX_REPLICA_COUNT){
+			forwardreplicacount = 0;
+			deletefrombuffer(glbforwardmsgid);
+			flags &= ~FORWARDTASK;
+			call forwardpacketTimer.stop();
+		}else{
+			forwardreplicacount++;
+			post forward();
+		}
 	}
 
 }

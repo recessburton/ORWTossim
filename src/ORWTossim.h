@@ -48,6 +48,7 @@ typedef nx_struct ProbeMsg {
 	nx_uint8_t dstid;
 	nx_uint8_t sourceid;
 	nx_float edc;
+	nx_float linkq;
 } ProbeMsg;
 
 typedef nx_struct ControlMsg {
@@ -55,6 +56,8 @@ typedef nx_struct ControlMsg {
 	nx_uint8_t sourceid;
 	nx_uint8_t forwardcontrol;	//转发者身份请求，节点收到邻居的节点包后，发送0x1转发者身份请求，发出者判断并回应0x2:同意，0x3:拒绝。
 	nx_uint8_t msgsource;		//请求转发的数据包中的源id，用于区别请求转发哪个数据包
+	nx_float linkq;				//转发请求者评估出的链路质量
+	nx_float edc;    			//转发请求者的EDC值
 }ControlMsg;
 
 typedef struct NeighborSetNode{
@@ -62,15 +65,15 @@ typedef struct NeighborSetNode{
 	float edc;		//邻居节点属性：EDC值
 	float p;		//邻居节点属性：与本节点链路质量
 	bool use;		//邻居节点在本节点中表现的属性：是否在本节点转发表中启用
-	int overheadcount;//邻居节点在本节点中表现的属性：串听到邻居节点包的次数（本节点没有被该邻居节点选为转发节点）
 }NeighborSet;
 
-#define WEIGHT 0.1F    	  //计算EDC时的weight值，去文中最好的经验值：0.1
-#define RECEPTALLTHRE 3  //数据包转发请求接受阈值，达到该阈值后，允许一切转发请求（避免多次拒绝不在转发表中的节点，导致网络延迟增加）
-#define DATATASK 0x1	  //掩码，是否处于发送数据包的过程中（自己产生的）
-#define INITIALIZED 0x2  //掩码，节点是否已经被初始化
-#define FORWARDTASK 0x4  //掩码，节点是否处在转发数据包的过程中（别人产生的）
-#define MSGSENDER 0x8    //掩码，节点是否具有周期发送数据的资格
-#define SLEEPALLOWED 0x10//掩码，是否允许休眠
+#define WEIGHT 0.1F    	      //计算EDC时的weight值，去文中最好的经验值：0.1
+#define RECEPTALLTHRE 3      //数据包转发请求接受阈值，达到该阈值后，允许一切转发请求（避免多次拒绝不在转发表中的节点，导致网络延迟增加）
+#define DATATASK 0x1	      //掩码，是否处于发送数据包的过程中（自己产生的）
+#define INITIALIZED 0x2      //掩码，节点是否已经被初始化
+#define FORWARDTASK 0x4      //掩码，节点是否处在转发数据包的过程中（别人产生的）
+#define MSGSENDER 0x8        //掩码，节点是否具有周期发送数据的资格
+#define SLEEPALLOWED 0x10    //掩码，是否允许休眠
+#define MAX_REPLICA_COUNT 20 //最大数据包转发重复计数
 
 #endif /* ORW_TOSSIM_H */

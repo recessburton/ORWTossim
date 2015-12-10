@@ -19,6 +19,9 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
 Logs：
+	V0.9 a.新建分支ORW_withoutQueue, 取消队列机制
+	     b.更新数据包交互机制
+	     c.加入最大重复发送计数，超过最大次数停止发送或转发
 	V0.8 a.数据包加入buffer和删除的标准改为sourceid是否重复（而且index更大），原为forwardid，不妥
 	     b.forward过程加入队列机制，使得节点可以同时承担多个不同数据包的转发任务
 	V0.7 完善转发判断机制，按照ORW，只有非Duplicate的包才转发
