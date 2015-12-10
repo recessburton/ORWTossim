@@ -48,12 +48,12 @@ implementation {
 	unsigned char flags;//标志位，与掩码运算可知相应位置是否置位
 	volatile float nodeedc;
 	volatile uint16_t index = 0;	//数据包序号
-	struct forwardtaskqueue{  //'sys/queue.h'使用：http://blog.csdn.net/astrotycoon/article/details/42917367
+	struct forwardtasklist{  //'sys/queue.h'链表使用：http://www.thinksaas.cn/group/topic/347706/
 	    int bufferindex;  
-	    TAILQ_ENTRY(forwardtaskqueue)  tailq_entry;
+	    LIST_ENTRY(forwardtasklist)  list_entry;
 	}; 
-	//构造队头
-    TAILQ_HEAD(tailq_head, forwardtaskqueue) head;
+	//构造链表头
+    LIST_HEAD(list_head, forwardtasklist) head;
 	
 
 /*位运算之掩码使用：
@@ -87,7 +87,7 @@ implementation {
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++)
 			forwardBuffer[i] == NULL;
 		//构造队列
-		TAILQ_INIT(&head);
+		LIST_INIT(&head);
 	}
 	
 	float getforwardingrate() {
@@ -242,14 +242,14 @@ implementation {
 	
 	void deletefrombuffer(uint8_t sourceid) {
 		int i;
-		struct forwardtaskqueue *forwardmsg = (struct forwardtaskqueue *)calloc(1, sizeof(struct forwardtaskqueue));  
+		struct forwardtasklist *forwardmsg = (struct forwardtasklist *)calloc(1, sizeof(struct forwardtasklist));  
 		atomic {
 			for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 				if(forwardBuffer[i] != NULL && forwardBuffer[i]->sourceid == sourceid) {
 					free(forwardBuffer[i]);
 					forwardBuffer[i] = NULL;
 					forwardmsg->bufferindex = i;
-					TAILQ_REMOVE(&head, forwardmsg, tailq_entry);
+					LIST_REMOVE(forwardmsg, list_entry);
 					return;
 				}
 			}
@@ -279,10 +279,10 @@ implementation {
 	}
 	
 	void forward() {
-		struct forwardtaskqueue *queuedata = NULL;
+		struct forwardtasklist *queuedata = NULL;
 		NeighborMsg *btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt,sizeof(NeighborMsg)));
 		NeighborMsg *neimsg = NULL;
-		TAILQ_FOREACH(queuedata, &head, tailq_entry) {
+		LIST_FOREACH(queuedata, &head, list_entry) {
 			neimsg = forwardBuffer[queuedata->bufferindex];
 			if(neimsg == NULL)
 				return;
@@ -317,7 +317,7 @@ implementation {
 		 * 但此处用到的是网络类型数据nx_，不存在这种情况，结构体在内存中存储是无空隙的。
 		 * */
 		int bufferindex=0;
-		struct forwardtaskqueue *forwardmsg = NULL;
+		struct forwardtasklist *forwardmsg = NULL;
 		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&INITIALIZED) != INITIALIZED)){
 			call wakeTimer.stop();
 			if(TOS_NODE_ID !=1)
@@ -370,10 +370,10 @@ implementation {
 			if((bufferindex = addtobuffer(btrpkt2))>=0){
 				updateSet(btrpkt2->forwarderid, btrpkt2->edc, btrpkt2->forwardingrate,FALSE);
 				sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
-				//加入转发队列
-				forwardmsg = (struct forwardtaskqueue *)calloc(1, sizeof(struct forwardtaskqueue));  
+				//加入转发列表
+				forwardmsg = (struct forwardtasklist *)calloc(1, sizeof(struct forwardtasklist));  
     			forwardmsg->bufferindex = bufferindex;
-    			TAILQ_INSERT_TAIL(&head, forwardmsg, tailq_entry); 
+    			LIST_INSERT_HEAD(&head, forwardmsg, list_entry); 
 				//转发
 				dbg("ORWTossimC", "Received a packet from %d, source:%d, index:%d, sending ack & forwarding...\n",btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
 				forward();
@@ -396,7 +396,7 @@ implementation {
 					}
 					if((flags&FORWARDTASK)==FORWARDTASK) {		//转发的包被成功转发
 						deletefrombuffer(btrpkt3->msgsource);
-						if (TAILQ_EMPTY(&head)){
+						if (LIST_EMPTY(&head)){
 							flags &= ~FORWARDTASK;
 							call forwardpacketTimer.stop();
 						}
