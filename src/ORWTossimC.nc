@@ -35,6 +35,9 @@ module ORWTossimC @safe(){
 	uses interface AMSend;
 	uses interface Random;
 	uses interface Receive;
+	uses interface Packet as CTRLPacket;
+	uses interface AMSend as CTRLSender;
+	uses interface Receive as CTRLReceiver;
 	uses interface SplitControl as RadioControl;	
 }
 
@@ -112,6 +115,7 @@ implementation {
 		if(msgreplicacount > MAX_REPLICA_COUNT){
 			msgreplicacount = 0;
 			flags &= ~DATATASK;
+			dbg("ORWTossimC", "Rechieve Max replica!STOPPOING SENDING DATA...\n");
 			call packetTimer.stop();
 			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
 			return;
@@ -298,7 +302,7 @@ implementation {
 	}
 	
 	void sendforwardrequest(uint8_t forwarderid, uint8_t msgsource) {
-		ControlMsg * btrpkt = (ControlMsg * )(call Packet.getPayload(&pkt,sizeof(ControlMsg)));
+		ControlMsg * btrpkt = (ControlMsg * )(call CTRLPacket.getPayload(&pkt,sizeof(ControlMsg)));
 		if(btrpkt == NULL)
 			return;
 		btrpkt->dstid = (nx_int8_t)forwarderid;
@@ -308,7 +312,7 @@ implementation {
 		btrpkt->edc = nodeedc;
 		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "Sending ACK to %d...\n",forwarderid);
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
+		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 	}
 	
 	task void forward() {
@@ -332,8 +336,9 @@ implementation {
 	}
 	
 	bool qualify(float edc) {
-		//判断接到的包需不需要被转发，edc比本节点转发的代价小，则不需要转发；否则，由本节点转发更合适
-		return (edc <= (nodeedc - WEIGHT)) ? FALSE : TRUE;
+		//判断接到的包需不需要被转发，本节点比转发一次的代价小，则转发；否则，由本节点不合适转发。此处的返回值采取“反逻辑”。
+		//注意，此处与节点邻居表中判断是否use的条件正好相反。（ (neighborSet[i].edc <= (nodeedc - WEIGHT))）
+		return (nodeedc <= (edc - WEIGHT)) ? FALSE : TRUE;
 	}
 
 	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {
@@ -401,37 +406,6 @@ implementation {
 			}
 			return msg;
 		}
-		if(len == sizeof(ControlMsg)){
-			//转发请求控制信息包处理
-			ControlMsg* btrpkt3 = (ControlMsg*) payload;
-			if(btrpkt3->forwardcontrol == 0x1){
-				//收到某个转发请求
-				if(btrpkt3->dstid - TOS_NODE_ID == 0){
-					updateSet(btrpkt3->sourceid, btrpkt3->edc, btrpkt3->linkq);
-					dbg("ORWTossimC", "Received forward request from %d, Stop sending MSG\n",btrpkt3->sourceid);
-					//有人转发了数据包，停止周期性发送
-					if((flags&DATATASK)==DATATASK) {		    //若为本节点产生的包被成功转发，准备下一次数据发送
-						flags &= ~DATATASK;
-						call packetTimer.stop();
-						call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
-					}
-					if((flags&FORWARDTASK)==FORWARDTASK) {		//转发的包被成功转发
-						deletefrombuffer(btrpkt3->msgsource);
-						flags &= ~FORWARDTASK;
-						call forwardpacketTimer.stop();
-						
-					}
-					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
-						call wakeTimer.stop();
-						if(TOS_NODE_ID !=1)
-							call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//恢复休眠触发时钟，向后延迟一段时间
-					}
-				}
-				return msg;
-			}else{
-			}
-			return msg;
-		}
 		return msg;
 	}
 
@@ -463,6 +437,7 @@ implementation {
 			forwardreplicacount = 0;
 			deletefrombuffer(glbforwardmsgid);
 			flags &= ~FORWARDTASK;
+			dbg("ORWTossimC", "Rechieve Max replica!STOPPOING FORWARD...\n");
 			call forwardpacketTimer.stop();
 		}else{
 			forwardreplicacount++;
@@ -470,4 +445,45 @@ implementation {
 		}
 	}
 
+	event void CTRLSender.sendDone(message_t *msg, error_t error){
+		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
+			call wakeTimer.stop();
+			if(TOS_NODE_ID !=1)
+				call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//重置休眠触发时钟，向后延迟一段时间
+		}
+	}
+
+	event message_t * CTRLReceiver.receive(message_t *msg, void *payload, uint8_t len){
+		if(len == sizeof(ControlMsg)){
+			//转发请求控制信息包处理
+			ControlMsg* btrpkt = (ControlMsg*) payload;
+			if(btrpkt->forwardcontrol == 0x1){
+				//收到某个转发请求
+				if(btrpkt->dstid - TOS_NODE_ID == 0){
+					updateSet(btrpkt->sourceid, btrpkt->edc, btrpkt->linkq);
+					dbg("ORWTossimC", "Received forward request from %d, Stop sending MSG\n",btrpkt->sourceid);
+					//有人转发了数据包，停止周期性发送
+					if((flags&DATATASK)==DATATASK) {		    //若为本节点产生的包被成功转发，准备下一次数据发送
+						flags &= ~DATATASK;
+						call packetTimer.stop();
+						call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
+					}
+					if((flags&FORWARDTASK)==FORWARDTASK) {		//转发的包被成功转发
+						deletefrombuffer(btrpkt->msgsource);
+						flags &= ~FORWARDTASK;
+						call forwardpacketTimer.stop();
+					}
+					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
+						call wakeTimer.stop();
+						if(TOS_NODE_ID !=1)
+							call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//恢复休眠触发时钟，向后延迟一段时间
+					}
+				}
+				return msg;
+			}else{
+			}
+			return msg;
+		}
+		return msg;
+	}
 }

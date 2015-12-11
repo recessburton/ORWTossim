@@ -34,6 +34,8 @@ implementation {
 	components new TimerMilliC() as forwardpacketTimer;
 	components new AMSenderC(ORWMSG);
 	components new AMReceiverC(ORWMSG);
+	components new AMSenderC(CTRLMSG) as CTRLSender;
+	components new AMReceiverC(CTRLMSG) as CTRLReceiver;
 	components ActiveMessageC as RadioControl;
 	components RandomC;
 
@@ -45,6 +47,9 @@ implementation {
 	App.Packet             -> AMSenderC;
 	App.AMSend             -> AMSenderC;
 	App.Receive            -> AMReceiverC;
+	App.CTRLPacket         -> CTRLSender;
+	App.CTRLSender         -> CTRLSender;
+	App.CTRLReceiver       -> CTRLReceiver;
 	App.RadioControl       -> RadioControl;
 	App.Random             -> RandomC;
 }
