@@ -336,9 +336,9 @@ implementation {
 	}
 	
 	bool qualify(float edc) {
-		//判断接到的包需不需要被转发，本节点比转发一次的代价小，则转发；否则，由本节点不合适转发。此处的返回值采取“反逻辑”。
+		//判断接到的包需不需要被转发，本节点比转发一次的代价小，则转发；否则，由本节点不合适转发
 		//注意，此处与节点邻居表中判断是否use的条件正好相反。（ (neighborSet[i].edc <= (nodeedc - WEIGHT))）
-		return (nodeedc <= (edc - WEIGHT)) ? FALSE : TRUE;
+		return (nodeedc <= (edc - WEIGHT)) ? TRUE : FALSE;
 	}
 
 	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {
