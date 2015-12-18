@@ -27,9 +27,9 @@ enum {
 	ORWMSG = 11,					//无线信道号，数据包
 	CTRLMSG = 12,                   //无线信道号，控制包
 	MAX_NEIGHBOR_NUM = 20,			//最大邻居数
-	PROBE_PERIOD_MILLI = 400,		//探测包发送间隔
+	PROBE_PERIOD_MILLI = 426,		//探测包发送间隔
 	PACKET_PERIOD_MILLI = 60222,	//数据包产生间隔
-	PACKET_DUPLICATE_MILLI = 100,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则回复长发包间隔（40）
+	PACKET_DUPLICATE_MILLI = 125,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则回复长发包间隔（40）
 	WAKE_PERIOD_MILLI = 100,		//射频唤醒时长
 	WAKE_DELAY_MILLI = 100,			//有包收到之后延迟休眠的时长
 	SLEEP_PERIOD_MILLI = 2048,		//睡眠时长
@@ -76,5 +76,11 @@ typedef struct NeighborSetNode{
 #define MSGSENDER 0x8        //掩码，节点是否具有周期发送数据的资格
 #define SLEEPALLOWED 0x10    //掩码，是否允许休眠
 #define MAX_REPLICA_COUNT 20 //最大数据包转发重复计数
+//空转函数，随机得浪费时间，用于各种包回复前的随机延迟，防止多个节点同时回复一个包，导致干扰
+#define RANDOMDELAY(randNum) do { \
+	int i,temp; \
+	for(i=0;i<randNum;i++) \
+		temp=i/3; \
+} while (/*CONSTCOND*/0)
 
 #endif /* ORW_TOSSIM_H */

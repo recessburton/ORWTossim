@@ -30,18 +30,13 @@ import sys
 t = Tossim([])
 r = t.radio()
 
-f = open("linkgain.out", "r")
+f = open("15-15-tight-mica2-grid.txt", "r")
 lines = f.readlines()
 for line in lines:
   s = line.split()
   if (len(s) > 0):
     if s[0] == "gain" and int(s[1]) !=0  and int(s[2]) != 0:
       r.add(int(s[1]), int(s[2]), float(s[3]))
-'''    elif s[0] == "noise":
-      if int(s[1])>100:
-      	continue
-      m = t.getNode(int(s[1]));
-      m.addNoiseTraceReading(int(float(s[2])))'''
 
 
 noise = open("meyer-short.txt", "r")
