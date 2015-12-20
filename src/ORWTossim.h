@@ -76,11 +76,19 @@ typedef struct NeighborSetNode{
 #define MSGSENDER 0x8        //掩码，节点是否具有周期发送数据的资格
 #define SLEEPALLOWED 0x10    //掩码，是否允许休眠
 #define MAX_REPLICA_COUNT 20 //最大数据包转发重复计数
-//空转函数，随机得浪费时间，用于各种包回复前的随机延迟，防止多个节点同时回复一个包，导致干扰
+
+//空转函数，延迟，用于各种包回复前的随机延迟，防止多个节点同时回复一个包，导致干扰.仿照c库delay()函数实现
+	/*uint32_t start,now; \
+	start = call LocalTime.get();\
+	do{\
+		now=start+1;\
+		now-=1;\
+		now=call LocalTime.get();\
+	}while(now-start<randNum);\*/
 #define RANDOMDELAY(randNum) do { \
-	int i,temp; \
-	for(i=0;i<randNum;i++) \
-		temp=i/3; \
+	int i,j;\
+	for(i=randNum;i>0;i--)\
+		for(j=100;j>0;j--);\
 } while (/*CONSTCOND*/0)
 
 #endif /* ORW_TOSSIM_H */

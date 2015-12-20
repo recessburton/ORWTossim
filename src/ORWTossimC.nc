@@ -4,7 +4,7 @@
  Created on  2015-12-10 16:15
  
  @author: ytc recessburton@gmail.com
- @version: 0.9
+ @version: 0.95
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -38,7 +38,8 @@ module ORWTossimC @safe(){
 	uses interface Packet as CTRLPacket;
 	uses interface AMSend as CTRLSender;
 	uses interface Receive as CTRLReceiver;
-	uses interface SplitControl as RadioControl;	
+	uses interface SplitControl as RadioControl;
+	uses interface LocalTime<TMilli> as LocalTime; 	
 }
 
 implementation {
@@ -54,12 +55,12 @@ implementation {
 	volatile float nodeedc;
 	volatile uint16_t index = 0;	//数据包序号
 	typedef struct overheadcountlist{
-		uint8_t nodeid;
+		int nodeid;
 		int count;
 		float forwardingrate;
 	}overheadcountlist;
 	
-	overheadcountlist ocl[MAX_NEIGHBOR_NUM];//overhead计数表，记录overhead到某个节点的次数，用于计算Linkquality
+	overheadcountlist ocl[MAX_NEIGHBOR_NUM*5];//overhead计数表，记录overhead到某个节点的次数，用于计算Linkquality
 
 /*位运算之掩码使用：
  * 打开位： flags = flags | MASK
@@ -87,9 +88,15 @@ implementation {
 			neighborSet[i].use = FALSE;
 		}
 		nodeedc = (TOS_NODE_ID ==1) ? 0.0f : FLT_MAX;
-		//初始化buffer
-		for(i=0;i<MAX_NEIGHBOR_NUM;i++)
+		//初始化buffer和OCL
+		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 			forwardBuffer[i] = NULL;
+		}
+		for(i=0;i<MAX_NEIGHBOR_NUM*5;i++){
+			ocl[i].nodeid = -1;
+			ocl[i].count = 0;
+			ocl[i].forwardingrate = 0.0f;
+		}
 		forwardCount = 0;
 	}
 	
@@ -110,7 +117,7 @@ implementation {
 		dbg("Probe", "Probe Send done.\n");
 	}
 	
-	task void sendMsg() {
+	void sendMsg() {
 		//周期产生数据包
 		NeighborMsg * btrpkt = NULL;
 		if(msgreplicacount > MAX_REPLICA_COUNT){
@@ -131,7 +138,7 @@ implementation {
 			index+=1;
 			dbg("ORWTossimC", "%s Create & Send NeighborMsg index %d...\n",sim_time_string(),index);
 		}else{
-			dbg("ORWTossimC", "%s Resend NeighborMsg index %d...\n",sim_time_string(),index);
+			;//dbg("ORWTossimC", "%s Resend NeighborMsg index %d...\n",sim_time_string(),index);
 		}
 		btrpkt->dstid = 0xFF;
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
@@ -150,7 +157,7 @@ implementation {
 		}else if((flags & MSGSENDER) == MSGSENDER){
 			//总共1/MESSAGE_PRODUCE_RATIO的节点产生数据包，其余节点不产生
 			call packetTimer.startOneShot(PACKET_DUPLICATE_MILLI);
-			post sendMsg();
+			sendMsg();
 		}
 	}
 	
@@ -277,27 +284,33 @@ implementation {
 	void updateOCL(uint8_t nodeid, float forwardingrate){
 		int i;
 		bool found = FALSE;
-		for(i=0;i<MAX_NEIGHBOR_NUM && !found;i++){
-			if(ocl[i].nodeid == nodeid){
+		for(i=0;i<MAX_NEIGHBOR_NUM*5 && !found;i++){
+			if((ocl[i].nodeid == -1)||(ocl[i].nodeid == nodeid)){
 				found = TRUE;
-				ocl[i].count ++;
+				ocl[i].nodeid = nodeid;
+				if(ocl[i].forwardingrate!=forwardingrate)
+					ocl[i].count += 1;
 				ocl[i].forwardingrate = forwardingrate;
+				//dbg("ORWTossimC", "Update OCL nodeid:%d,fr:%f...\n",nodeid,forwardingrate);
+			}
+		}
+		if(!found){
+			dbg("ORWTossimC", "Update ERROR! i:%d\n",i);
+			for(i=0;i<MAX_NEIGHBOR_NUM*5;i++){
+				dbg("ORWTossimC", "i:%d,nodeid:%d,c:%d,fr:%f.\n",i,ocl[i].nodeid,ocl[i].count,ocl[i].forwardingrate);
 			}
 		}
 	}
 	
 	float getLinkQ(uint8_t nodeid){
 		int i;
-		bool found = FALSE;
-		for(i=0;i<MAX_NEIGHBOR_NUM && !found;i++){
+		for(i=0;i<MAX_NEIGHBOR_NUM*5;i++){
 			if(ocl[i].nodeid == nodeid){
-				dbg("ORWTossimC", "getting LinkQ:count:%d,fr:%f.\n",ocl[i].count,ocl[i].forwardingrate);
+				//dbg("ORWTossimC", "getting LinkQ:count:%d,fr:%f.\n",ocl[i].count,ocl[i].forwardingrate);
 				return 1.0f/(1.0f/ocl[i].count/ocl[i].forwardingrate);
 			}
 		}
-		if(TOS_NODE_ID == 1)
-			return 1;
-		return -1;	
+		return -1.0f;	
 	}
 	
 	void sendACK(uint8_t sourceid) {
@@ -308,7 +321,9 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->edc = (nx_float)nodeedc;
 		btrpkt->linkq = 1;
+		dbg("ORWTossimC", "%s before sleep,RDex:%d\n",sim_time_string(),(unsigned int)call Random.rand16());
 		RANDOMDELAY((unsigned int)call Random.rand16());
+		dbg("ORWTossimC", "%s after sleep\n",sim_time_string());
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
 	
@@ -323,11 +338,12 @@ implementation {
 		btrpkt->edc = nodeedc;
 		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "Sending ACK to %d,with lq:%f...\n",forwarderid,btrpkt->linkq);
+		//dbg("ORWTossimC", "getLinkQ:%f,btrlinkq:%f\n",getLinkQ(forwarderid),btrpkt->linkq);
 		RANDOMDELAY((unsigned int)call Random.rand16());
 		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 	}
 	
-	task void forward() {
+	void forward() {
 		NeighborMsg *btrpkt = (NeighborMsg * )(call Packet.getPayload(&pkt,sizeof(NeighborMsg)));
 		NeighborMsg *neimsg = NULL;
 		neimsg = getmsgfrombuffer(glbforwardmsgid);
@@ -342,9 +358,9 @@ implementation {
 		RANDOMDELAY((unsigned int)call Random.rand16());
 		if((flags&FORWARDTASK)!=FORWARDTASK) {
 			flags |= FORWARDTASK;
-			dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d, index:%d...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index);
+			dbg("ORWTossimC", "%s Forwarding packet from %d, source:%d, index:%d, fr:%f...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index,btrpkt->forwardingrate);
 		}else{
-			dbg("ORWTossimC", "%s Reforwarding packet from %d, source:%d, index:%d...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index);
+			;//dbg("ORWTossimC", "%s Reforwarding packet from %d, source:%d, index:%d, fr:%f...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index,btrpkt->forwardingrate);
 		}
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 		call wakeTimer.stop();	//停止休眠，等待转发请求
@@ -402,6 +418,7 @@ implementation {
 				return msg;
 			if(TOS_NODE_ID-1==0){
 				//sink 节点的处理
+				updateOCL(btrpkt2->forwarderid,btrpkt2->forwardingrate);
 				dbg("ORWTossimC", "%s Sink Node received a packet from %d,source:%d,index:%d.\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
 				sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
 				return msg;
@@ -417,7 +434,7 @@ implementation {
 					return msg;
 				dbg("ORWTossimC", "%s Received a packet from %d, source:%d, index:%d, sending ack & forwarding...\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
 				glbforwardmsgid = btrpkt2->sourceid;
-				post forward();
+				forward();
 				call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
 			}
 			return msg;
@@ -457,7 +474,7 @@ implementation {
 			call forwardpacketTimer.stop();
 		}else{
 			forwardreplicacount++;
-			post forward();
+			forward();
 		}
 	}
 

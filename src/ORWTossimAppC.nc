@@ -4,7 +4,7 @@
  Created on  2015-12-10 16:15
  
  @author: ytc recessburton@gmail.com
- @version: 0.9
+ @version: 0.95
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ implementation {
 	components new AMReceiverC(CTRLMSG) as CTRLReceiver;
 	components ActiveMessageC as RadioControl;
 	components RandomC;
+	components HilTimerMilliC as LocalTimer;
 
 	App.Boot               -> MainC;
 	App.packetTimer        -> packetTimer;
@@ -52,4 +53,5 @@ implementation {
 	App.CTRLReceiver       -> CTRLReceiver;
 	App.RadioControl       -> RadioControl;
 	App.Random             -> RandomC;
+	App.LocalTime          -> LocalTimer;
 }
