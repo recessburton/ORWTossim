@@ -86,9 +86,13 @@ typedef struct NeighborSetNode{
 		now=call LocalTime.get();\
 	}while(now-start<randNum);\*/
 #define RANDOMDELAY(randNum) do { \
-	int i,j;\
-	for(i=randNum;i>0;i--)\
-		for(j=100;j>0;j--);\
+	int r=randNum*156;\
+	do{\
+		int Num=992;\
+		do{\
+			Num--;\
+		}while(Num);\
+	}while(--r);\
 } while (/*CONSTCOND*/0)
 
 #endif /* ORW_TOSSIM_H */
