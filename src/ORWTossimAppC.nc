@@ -1,10 +1,10 @@
 /**
- Copyright (C),2014-2015, YTC, www.bjfulinux.cn
- Copyright (C),2014-2015, ENS Lab, ens.bjfu.edu.cn
- Created on  2015-12-10 16:15
+ Copyright (C),2014-2016, YTC, www.bjfulinux.cn
+ Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
+ Created on  2016-01-25 09:40
  
  @author: ytc recessburton@gmail.com
- @version: 0.95
+ @version: 1.0
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

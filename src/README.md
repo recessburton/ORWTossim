@@ -18,9 +18,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
-Logs：
+Change Log：
+	V1.0 a.改进日志文件的记录方式
+		 b.修正转发数据包成功后，重发次数未置0的bug
 	V0.95 加入随机时延机制，在收到包后节点随机延迟一段时间进入休眠流程，防止了在几个节点收到包后，从此进入同步的工作状态的问题。
-	V0.9 a.新建分支ORW_withoutQueue, 取消队列机制
+	V0.9 a.新建版本brantch ORW_withoutQueue, 取消队列机制
 	     b.更新数据包交互机制
 	     c.加入最大重复发送计数，超过最大次数停止发送或转发
 	V0.8 a.数据包加入buffer和删除的标准改为sourceid是否重复（而且index更大），原为forwardid，不妥
@@ -29,8 +31,4 @@ Logs：
 	V0.6 从Master分新的Brantch：PureORW，更改了转发授权机制，由原来的根据对方EDC值判断转发资格改为先请求先同意的转发策略，纯粹的机会路由
 	V0.5 修正bug #1
 	V0.4 采用掩码机制节省空间，简化配置 
-	
-Known Bugs: 
-	#1 V0.4 链路质量p大于1，可达三四十。
-		none.
 

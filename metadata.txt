@@ -1,0 +1,16 @@
+日志数据格式说明：
+
+ORWTossimC频道数据（logs_ORW）
+记录格式：
+DEBUG('节点号'):  '时间' '消息类型' [数据段...]
+
+不同类型消息各自的数据段说明如下：
+REPLICA#：重发次数
+RECEIVE：上一跳 数据源 编号	
+SINK：上一跳 数据源 编号
+FORWARD：上一跳 数据源 编号 forwardingrate
+ACK：目标节点 链路质量
+CREATE：编号
+ERROR：错误说明
+
+ 

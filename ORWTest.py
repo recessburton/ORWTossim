@@ -60,12 +60,17 @@ for i in range(1, 100):
 
 print "Starting simulation."
 
-t.addChannel("Probe", sys.stdout)
-t.addChannel("ORWTossimC", sys.stdout)
 f1 = open("logs_radio","w")
+f2 = open("logs_probe","w")
+f3 = open("logs_ORW","w")
+f4 = open("logs_neighbor","w")
 t.addChannel("Radio", f1)
+t.addChannel("Probe", f2)
+t.addChannel("ORWTossimC", f3)
+t.addChannel("Neighbor", f4)
 
-while (t.time() < 200000 * t.ticksPerSecond()):
+
+while (t.time() < 36000 * t.ticksPerSecond()):
   t.runNextEvent()
 
 print "Simulation completed."
