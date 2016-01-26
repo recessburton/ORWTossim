@@ -25,10 +25,13 @@ from tinyos.tossim.TossimApp import *
 from random import *
 import sys
 
+emulatehours = 10.0
+emulatetimeseconds = int(emulatehours*3600)
 #n = NescApp("TestNetwork", "app.xml")
 #t = Tossim(n.variables.variables())
 t = Tossim([])
 r = t.radio()
+tickspersencond = t.ticksPerSecond()
 
 f = open("15-15-tight-mica2-grid.txt", "r")
 lines = f.readlines()
@@ -66,11 +69,10 @@ f3 = open("logs_ORW","w")
 f4 = open("logs_neighbor","w")
 t.addChannel("Radio", f1)
 t.addChannel("Probe", f2)
-t.addChannel("ORWTossimC", f3)
+t.addChannel("ORWTossimC", sys.stdout)
 t.addChannel("Neighbor", f4)
 
-
-while (t.time() < 36000 * t.ticksPerSecond()):
-  t.runNextEvent()
+while (t.time() < emulatetimeseconds * tickspersencond):
+	t.runNextEvent()
 
 print "Simulation completed."

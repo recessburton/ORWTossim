@@ -318,7 +318,9 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->edc = (nx_float)nodeedc;
 		btrpkt->linkq = 1;
-		RANDOMDELAY((unsigned int)call Random.rand16());
+		dbg("ORWTossimC", ">>>>>>>>>>>>>>>>>%ld before delay.\n",call LocalTime.get());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%500);
+		dbg("ORWTossimC", ">>>>>>>>>>>>>>>>>%ld after delay.\n",call LocalTime.get());
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
 	

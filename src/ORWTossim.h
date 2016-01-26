@@ -79,14 +79,13 @@ typedef struct NeighborSetNode{
 
 //空转函数，延迟，用于各种包回复前的随机延迟，防止多个节点同时回复一个包，导致干扰.仿照c库delay()函数实现
 	/*uint32_t start,now; \
+	int r=randNum;\
 	start = call LocalTime.get();\
 	do{\
-		now=start+1;\
-		now-=1;\
 		now=call LocalTime.get();\
-	}while(now-start<randNum);\*/
+	}while(now-start<r);\*/ /*上述代码仿真环境不可用*/
 #define RANDOMDELAY(randNum) do { \
-	int r=randNum*156;\
+	int r=randNum*100;\
 	do{\
 		int Num=992;\
 		do{\
