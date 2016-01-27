@@ -26,7 +26,7 @@ from random import *
 import sys
 
 emulatehours = 10.0
-emulatetimeseconds = int(emulatehours*3600)
+emulatetimeseconds = int(emulatehours*3687)
 #n = NescApp("TestNetwork", "app.xml")
 #t = Tossim(n.variables.variables())
 t = Tossim([])

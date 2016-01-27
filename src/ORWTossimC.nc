@@ -318,7 +318,9 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->edc = (nx_float)nodeedc;
 		btrpkt->linkq = 1;
-		RANDOMDELAY(((unsigned int)call Random.rand16())%500);
+		//dbg("ORWTossimC", ">>>>>>>>>before %ld %s\n",sim_time(),sim_time_string());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
+		//dbg("ORWTossimC", ">>>>>>>>>after %ld %s\n",sim_time(),sim_time_string());
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
 	
@@ -333,7 +335,7 @@ implementation {
 		btrpkt->edc = nodeedc;
 		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "%s ACK %d %f\n",sim_time_string(),forwarderid,btrpkt->linkq);
-		RANDOMDELAY((unsigned int)call Random.rand16());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
 		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 	}
 	
@@ -349,7 +351,7 @@ implementation {
 		btrpkt->dstid          = 0xFF;
 		btrpkt->forwardingrate = getforwardingrate();
 		btrpkt->edc            = nodeedc;
-		RANDOMDELAY((unsigned int)call Random.rand16());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
 		if((flags&FORWARDTASK)!=FORWARDTASK) {
 			flags |= FORWARDTASK;
 			dbg("ORWTossimC", "%s FORWARD %d %d %d %f\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index,btrpkt->forwardingrate);

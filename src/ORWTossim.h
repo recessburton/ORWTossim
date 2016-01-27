@@ -83,15 +83,20 @@ typedef struct NeighborSetNode{
 	start = call LocalTime.get();\
 	do{\
 		now=call LocalTime.get();\
-	}while(now-start<r);\*/ /*上述代码仿真环境不可用*/
-#define RANDOMDELAY(randNum) do { \
-	int r=randNum*100;\
+	}while(now-start<r);\*/ /*方法一：上述代码仿真环境不可用*/
+
+/*int r=randNum;\
 	do{\
 		int Num=992;\
 		do{\
 			Num--;\
 		}while(Num);\
 	}while(--r);\
-} while (/*CONSTCOND*/0)
+ * */ /*方法二：上述方法仿真环境不可用*/
+
+#define RANDOMDELAY(randNum) do { \
+	int r = randNum;\
+	sim_set_time(sim_time()+(sim_time_t)(r*10000000));\
+} while (/*CONSTCOND*/0)   /*方法三：此方法仅可用于仿真环境*/
 
 #endif /* ORW_TOSSIM_H */
