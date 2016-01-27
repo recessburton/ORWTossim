@@ -430,6 +430,7 @@ implementation {
 					return msg;
 				dbg("ORWTossimC", "%s RECEIVE %d %d %d\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
 				glbforwardmsgid = btrpkt2->sourceid;
+				forwardreplicacount++;
 				forward();
 				call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
 			}
