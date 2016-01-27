@@ -33,7 +33,7 @@ enum {
 	WAKE_PERIOD_MILLI = 100,		//射频唤醒时长
 	WAKE_DELAY_MILLI = 100,			//有包收到之后延迟休眠的时长
 	SLEEP_PERIOD_MILLI = 2048,		//睡眠时长
-	MESSAGE_PRODUCE_RATIO = 0xA,	//产生数据包的节点比例，0xa表示10，即1/10
+	MESSAGE_PRODUCE_RATIO = 10,	//产生数据包的节点比例，即10%
 };
 
 typedef nx_struct NeighborMsg {

@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2016, YTC, www.bjfulinux.cn
  Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
- Created on  2016-01-25 09:40
+ Created on  2016-01-27 13:40
  
  @author: ytc recessburton@gmail.com
- @version: 1.0
+ @version: 1.1
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ module ORWTossimC @safe(){
 	uses interface Timer<TMilli> as forwardpacketTimer;
 	uses interface Timer<TMilli> as wakeTimer;
 	uses interface Timer<TMilli> as sleepTimer;
+	uses interface ParameterInit<uint16_t> as SeedInit;
 	uses interface Packet;
 	uses interface AMSend;
 	uses interface Random;
@@ -72,9 +73,13 @@ implementation {
 	event void Boot.booted(){
 		int i;
 		flags = 0x0;//初始化标志位
-		flags = (call Random.rand16() & MESSAGE_PRODUCE_RATIO)==0 ? (flags | MSGSENDER) : (flags & ~MSGSENDER);
+		call SeedInit.init((uint16_t)sim_time());
+		flags = ((unsigned int)(call Random.rand16())%100)/MESSAGE_PRODUCE_RATIO==0 ? (flags | MSGSENDER) : (flags & ~MSGSENDER);
 		flags |= SLEEPALLOWED;		//启用休眠机制
 		//flags &= ~SLEEPALLOWED;	//关闭休眠机制
+		if((flags & MSGSENDER) == MSGSENDER){
+			dbg("Bootinfo", "is Msg Sendor.\n");
+		}
 		call RadioControl.start();
 		if(TOS_NODE_ID == 1)
 			flags |= INITIALIZED;	//sink节点一开始就是初始化的
@@ -319,7 +324,8 @@ implementation {
 		btrpkt->edc = (nx_float)nodeedc;
 		btrpkt->linkq = 1;
 		//dbg("ORWTossimC", ">>>>>>>>>before %ld %s\n",sim_time(),sim_time_string());
-		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
+		call SeedInit.init((uint16_t)sim_time());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
 		//dbg("ORWTossimC", ">>>>>>>>>after %ld %s\n",sim_time(),sim_time_string());
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
@@ -335,7 +341,8 @@ implementation {
 		btrpkt->edc = nodeedc;
 		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "%s ACK %d %f\n",sim_time_string(),forwarderid,btrpkt->linkq);
-		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
+		call SeedInit.init((uint16_t)sim_time());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
 		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 	}
 	
@@ -351,7 +358,8 @@ implementation {
 		btrpkt->dstid          = 0xFF;
 		btrpkt->forwardingrate = getforwardingrate();
 		btrpkt->edc            = nodeedc;
-		RANDOMDELAY(((unsigned int)call Random.rand16())%200);
+		call SeedInit.init((uint16_t)sim_time());
+		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
 		if((flags&FORWARDTASK)!=FORWARDTASK) {
 			flags |= FORWARDTASK;
 			dbg("ORWTossimC", "%s FORWARD %d %d %d %f\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index,btrpkt->forwardingrate);
@@ -375,8 +383,10 @@ implementation {
 		 * */
 		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&INITIALIZED) != INITIALIZED)){
 			call wakeTimer.stop();
-			if(TOS_NODE_ID !=1)
-				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())/100);//重置休眠触发时钟，向后延迟一段时间
+			if(TOS_NODE_ID !=1){
+				call SeedInit.init((uint16_t)sim_time());
+				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
+			}
 		}
 		if(len == sizeof(ProbeMsg)) {
 			//probe 探测包处理
@@ -388,8 +398,10 @@ implementation {
 				flags |= INITIALIZED;
 				if((flags&SLEEPALLOWED) == SLEEPALLOWED){
 					call wakeTimer.stop();
-					if(TOS_NODE_ID !=1)
-						call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())/100);//重置休眠触发时钟，向后延迟一段时间
+					if(TOS_NODE_ID !=1){
+						call SeedInit.init((uint16_t)sim_time());
+						call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
+					}
 				}
 				return msg;
 			}
@@ -478,8 +490,10 @@ implementation {
 	event void CTRLSender.sendDone(message_t *msg, error_t error){
 		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
 			call wakeTimer.stop();
-			if(TOS_NODE_ID !=1)
-				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())/100);//重置休眠触发时钟，向后延迟一段时间
+			if(TOS_NODE_ID !=1){
+				call SeedInit.init((uint16_t)sim_time());
+				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
+			}
 		}
 	}
 
@@ -498,6 +512,7 @@ implementation {
 						dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),msgreplicacount);
 						msgreplicacount = 0;
 						call packetTimer.stop();
+						call SeedInit.init((uint16_t)sim_time());
 						call packetTimer.startOneShot(PACKET_PERIOD_MILLI+((unsigned int)call Random.rand16())/100);
 					}else{		    //转发的包被成功转发
 						deletefrombuffer(btrpkt->msgsource);
@@ -509,8 +524,10 @@ implementation {
 					
 					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
 						call wakeTimer.stop();
-						if(TOS_NODE_ID !=1)
-							call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())/100);//恢复休眠触发时钟，向后延迟一段时间
+						if(TOS_NODE_ID !=1){
+							call SeedInit.init((uint16_t)sim_time());
+							call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
+						}
 					}
 				}
 				return msg;

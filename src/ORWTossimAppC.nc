@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2016, YTC, www.bjfulinux.cn
  Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
- Created on  2016-01-25 09:40
+ Created on  2016-01-27 13:40
  
  @author: ytc recessburton@gmail.com
- @version: 1.0
+ @version: 1.1
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -54,4 +54,5 @@ implementation {
 	App.RadioControl       -> RadioControl;
 	App.Random             -> RandomC;
 	App.LocalTime          -> LocalTimer;
+	App.SeedInit           -> RandomC;
 }

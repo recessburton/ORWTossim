@@ -25,7 +25,7 @@ from tinyos.tossim.TossimApp import *
 from random import *
 import sys
 
-emulatehours = 10.0 #emulate time
+emulatehours = 20.0 #emulate time
 emulatetimeseconds = int(emulatehours*3687)
 #n = NescApp("TestNetwork", "app.xml")
 #t = Tossim(n.variables.variables())
@@ -72,12 +72,14 @@ t.addChannel("Probe", f2)
 t.addChannel("ORWTossimC", f3)
 #t.addChannel("ORWTossimC", sys.stdout)
 t.addChannel("Neighbor", f4)
+t.addChannel("Bootinfo", sys.stdout)
 
-percent = 10
+percent = 0
 while (t.time() < emulatetimeseconds * tickspersencond):
 	if t.time() > (emulatetimeseconds * tickspersencond*(percent/100.0)):
-		print '%d'%percent+'%'
-		percent+=10
+		sys.stdout.write('\r%d'%percent+'%')
+		sys.stdout.flush()
+		percent+=1
 	t.runNextEvent()
 
-print "Simulation completed."
+print "\rSimulation completed."
