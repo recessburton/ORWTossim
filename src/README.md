@@ -35,5 +35,5 @@ Change Log：
 
 Known Bugs: 
 	#1 V0.4 链路质量p大于1，可达三四十。 FIXED.
-	#2 V1.1 长时间工作后部分节点的EDC变成无穷大。 UNHANDLED.
+	#2 V1.1 长时间工作后部分节点的EDC变成无穷大。 UNHANDLED.  
 
