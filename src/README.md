@@ -19,6 +19,7 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 	
 Change Log：
+	V1.2 改进收到多个ack回复时的判重机制
 	V1.1 修正随机时延产生机制，采用时间做随机种子
 	V1.0 a.改进日志文件的记录方式
 		 b.修正转发数据包成功后，重发次数未置0的bug
@@ -35,5 +36,5 @@ Change Log：
 
 Known Bugs: 
 	#1 V0.4 链路质量p大于1，可达三四十。 FIXED.
-	#2 V1.1 长时间工作后部分节点的EDC变成无穷大。 UNHANDLED.  
+	#2 V1.1 长时间工作后邻居表中部分节点的EDC变成无穷大。 UNHANDLED.  
 

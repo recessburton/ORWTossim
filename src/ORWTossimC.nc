@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2016, YTC, www.bjfulinux.cn
  Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
- Created on  2016-01-27 13:40
+ Created on  2016-03-29 10:21
  
  @author: ytc recessburton@gmail.com
- @version: 1.1
+ @version: 1.2
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ module ORWTossimC @safe(){
 	uses interface Timer<TMilli> as forwardpacketTimer;
 	uses interface Timer<TMilli> as wakeTimer;
 	uses interface Timer<TMilli> as sleepTimer;
+	uses interface Timer<TMilli> as forwardPauseTimer;
 	uses interface ParameterInit<uint16_t> as SeedInit;
 	uses interface Packet;
 	uses interface AMSend;
@@ -55,6 +56,10 @@ implementation {
 	unsigned char flags;//标志位，与掩码运算可知相应位置是否置位
 	volatile float nodeedc;
 	volatile uint16_t index = 0;	//数据包序号
+	bool forwardpause = FALSE;
+	bool judgement=FALSE;
+	NeighborMsg * duplicatemsg;//作为下游节点暂存刚接到拟转发的包
+	NeighborMsg * msgsent;//作为上游节点暂存刚转发出去的包
 	typedef struct overheadcountlist{
 		int nodeid;
 		int count;
@@ -62,6 +67,8 @@ implementation {
 	}overheadcountlist;
 	
 	overheadcountlist ocl[MAX_NEIGHBOR_NUM*5];//overhead计数表，记录overhead到某个节点的次数，用于计算Linkquality
+	
+	ControlMsg *forwardrequestlist[MAX_NEIGHBOR_NUM]; //存放（多个）ack返回者的列表
 
 /*位运算之掩码使用：
  * 打开位： flags = flags | MASK
@@ -103,6 +110,10 @@ implementation {
 			ocl[i].forwardingrate = 0.0f;
 		}
 		forwardCount = 0;
+		duplicatemsg = (NeighborMsg *)malloc(sizeof(NeighborMsg));
+		msgsent = (NeighborMsg *)malloc(sizeof(NeighborMsg));
+		memset(duplicatemsg,sizeof(NeighborMsg),0);
+		memset(msgsent,sizeof(NeighborMsg),0);
 	}
 	
 	float getforwardingrate() {
@@ -153,17 +164,6 @@ implementation {
 		btrpkt->edc=nodeedc;
 		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 		call wakeTimer.stop();	//关闭休眠，等待转发请求
-	}
-	
-	event void packetTimer.fired() {
-		if(neighborSetSize == 0){
-			post sendProbe();
-			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
-		}else if((flags & MSGSENDER) == MSGSENDER){
-			//总共1/MESSAGE_PRODUCE_RATIO的节点产生数据包，其余节点不产生
-			call packetTimer.startOneShot(PACKET_DUPLICATE_MILLI);
-			sendMsg();
-		}
 	}
 	
 	int edccmp(const void *a ,const void *b){
@@ -231,7 +231,7 @@ implementation {
 		}
 	}
 	
-	int addtobuffer(NeighborMsg* neimsg) {
+	int addtobuffer(const NeighborMsg* neimsg) {
 		//返回值：-1 加入失败，或已有相同的包，duplicate； >=0 加入成功，返回buffer中index值
 		int i;
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
@@ -344,6 +344,8 @@ implementation {
 		call SeedInit.init((uint16_t)sim_time());
 		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
 		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
+		forwardpause = TRUE;
+		call forwardPauseTimer.startOneShot(160);
 	}
 	
 	void forward() {
@@ -352,6 +354,7 @@ implementation {
 		neimsg = getmsgfrombuffer(glbforwardmsgid);
 		if(neimsg == NULL)
 			return;
+		forwardreplicacount++;
 		forwardCount++;
 		memcpy(btrpkt, neimsg, sizeof(NeighborMsg));
 		btrpkt->forwarderid    = (nx_int8_t)TOS_NODE_ID;
@@ -376,7 +379,7 @@ implementation {
 		return (nodeedc <= (edc - WEIGHT)) ? TRUE : FALSE;
 	}
 
-	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {
+	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {//用于接收上一跳发来的信息，作为下游节点时触发
 		/* 按照不同长度的包区分包的类型，在此处为特例，因为不是所有不同种类的包恰好都有不同的长度。
 		 * 另外，在用sizeof计算结构体长度时，本应注意字节对齐问题，比如第一个成员为uint8_t，第二个成员为uint16_t，则其长度为32
 		 * 但此处用到的是网络类型数据nx_，不存在这种情况，结构体在内存中存储是无空隙的。
@@ -437,14 +440,22 @@ implementation {
 			if(!qualify(btrpkt2->edc))	//如果该节点的数据包值不值得被转发
 				return msg;
 			if(((flags&DATATASK) != DATATASK)&&((flags&FORWARDTASK) != FORWARDTASK)) {
-				sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
-				if(addtobuffer(btrpkt2) < 0)
+				if (memcmp(duplicatemsg,btrpkt2,sizeof(NeighborMsg))){//头文件中开启了内存字节对齐，否则memcmp会出错！！
+					//接到完全相同的duplicate包，则说明正在进行forward竞争
+					call forwardPauseTimer.stop();
+					sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
 					return msg;
-				dbg("ORWTossimC", "%s RECEIVE %d %d %d\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
-				glbforwardmsgid = btrpkt2->sourceid;
-				forwardreplicacount++;
-				forward();
-				call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
+				}else if (forwardpause) //在forwardpause期间接到其它的包，丢弃
+					return msg;
+				else{
+					//正常的接包流程
+					memcpy(duplicatemsg,btrpkt2,sizeof(NeighborMsg));
+					sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
+					if(addtobuffer(btrpkt2) < 0)
+						return msg;
+					dbg("ORWTossimC", "%s RECEIVE %d %d %d\n",sim_time_string(),btrpkt2->forwarderid,btrpkt2->sourceid,btrpkt2->index);
+					glbforwardmsgid = btrpkt2->sourceid;
+				}
 			}
 			return msg;
 		}
@@ -473,19 +484,6 @@ implementation {
 	   		call wakeTimer.startOneShot(WAKE_PERIOD_MILLI);
 		}
 	}
-	
-	event void forwardpacketTimer.fired(){
-		if(forwardreplicacount > MAX_REPLICA_COUNT){
-			forwardreplicacount = 0;
-			deletefrombuffer(glbforwardmsgid);
-			flags &= ~FORWARDTASK;
-			dbg("ORWTossimC", "%s ERROR max_replica_#_rechieved\n",sim_time_string());
-			call forwardpacketTimer.stop();
-		}else{
-			forwardreplicacount++;
-			forward();
-		}
-	}
 
 	event void CTRLSender.sendDone(message_t *msg, error_t error){
 		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
@@ -496,39 +494,43 @@ implementation {
 			}
 		}
 	}
+	
+	void addtofrl(const ControlMsg* nbm){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL)
+			i++;
+		forwardrequestlist[i] = (ControlMsg*)malloc(sizeof(ControlMsg));
+		memcpy(forwardrequestlist,nbm,sizeof(ControlMsg));
+	}
 
-	event message_t * CTRLReceiver.receive(message_t *msg, void *payload, uint8_t len){
+	bool checkfrl(){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL){
+			dbg("ORWTossimC", "%s FWDJUDGE %d\n",sim_time_string(),forwardrequestlist[i]->sourceid);
+			i++;
+		}
+		dbg("ORWTossimC", "%s TOTALCOMPETITOR %d\n",sim_time_string(),i);
+		if (i>1)
+			return TRUE;
+		else
+			return FALSE;
+	}
+	
+	void clearfrl(){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL){
+				free(forwardrequestlist[i]);
+				forwardrequestlist[i] = NULL;
+		}
+	}
+	event message_t * CTRLReceiver.receive(message_t *msg, void *payload, uint8_t len){//用于接收下一跳发来的信息，作为上游节点时触发
 		if(len == sizeof(ControlMsg)){
 			//转发请求控制信息包处理
 			ControlMsg* btrpkt = (ControlMsg*) payload;
 			if(btrpkt->forwardcontrol == 0x1){
 				//收到某个转发请求
 				if(btrpkt->dstid - TOS_NODE_ID == 0){
-					updateSet(btrpkt->sourceid, btrpkt->edc, btrpkt->linkq);
-					//dbg("ORWTossimC", "%s Received forward request from %d with lq:%f, Stop sending MSG\n",sim_time_string(),btrpkt->sourceid,btrpkt->linkq);
-					//有人转发了数据包，停止周期性发送
-					if(btrpkt->msgsource - TOS_NODE_ID == 0) {		    //若为本节点产生的包被成功转发，准备下一次数据发送
-						flags &= ~DATATASK;
-						dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),msgreplicacount);
-						msgreplicacount = 0;
-						call packetTimer.stop();
-						call SeedInit.init((uint16_t)sim_time());
-						call packetTimer.startOneShot(PACKET_PERIOD_MILLI+((unsigned int)call Random.rand16())/100);
-					}else{		    //转发的包被成功转发
-						deletefrombuffer(btrpkt->msgsource);
-						flags &= ~FORWARDTASK;
-						dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),forwardreplicacount);
-						forwardreplicacount = 0;
-						call forwardpacketTimer.stop();
-					}
-					
-					if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
-						call wakeTimer.stop();
-						if(TOS_NODE_ID !=1){
-							call SeedInit.init((uint16_t)sim_time());
-							call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
-						}
-					}
+					addtofrl(btrpkt);
 				}
 				return msg;
 			}else{
@@ -536,5 +538,80 @@ implementation {
 			return msg;
 		}
 		return msg;
+	}
+	
+	event void packetTimer.fired() {
+		if(neighborSetSize == 0){
+			post sendProbe();
+			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
+		}else if((flags & MSGSENDER) == MSGSENDER){
+			//总共1/MESSAGE_PRODUCE_RATIO的节点产生数据包，其余节点不产生
+				call packetTimer.startOneShot(PACKET_DUPLICATE_MILLI);
+				if((flags&FORWARDTASK) != FORWARDTASK){ //若有转发任务则该周期不产生数据
+					if(!judgement){//第一次发送
+						judgement = TRUE;
+						sendMsg();
+					}else{
+						if(checkfrl()){//接收到多个ack，存在竞争
+							sendMsg();
+						}else{//没有竞争
+							clearfrl();
+							flags &= ~DATATASK;
+							dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),msgreplicacount);
+							msgreplicacount = 0;
+							call packetTimer.stop();
+							call SeedInit.init((uint16_t)sim_time());
+							call packetTimer.startOneShot(PACKET_PERIOD_MILLI+((unsigned int)call Random.rand16())/100);
+							if(forwardrequestlist[0])
+								updateSet(forwardrequestlist[0]->sourceid, forwardrequestlist[0]->edc, forwardrequestlist[0]->linkq);
+							if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
+								call wakeTimer.stop();
+								if(TOS_NODE_ID !=1){
+									call SeedInit.init((uint16_t)sim_time());
+									call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
+								}
+							}
+						}
+					}
+					
+				}
+		}
+	}
+
+	event void forwardpacketTimer.fired(){
+		if(forwardreplicacount > MAX_REPLICA_COUNT){
+			forwardreplicacount = 0;
+			deletefrombuffer(glbforwardmsgid);
+			flags &= ~FORWARDTASK;
+			dbg("ORWTossimC", "%s ERROR max_replica_#_rechieved\n",sim_time_string());
+			call forwardpacketTimer.stop();
+		}else{
+			if(checkfrl()){//接收到多个ack，存在竞争
+				forward();
+			}else{//没有竞争
+				clearfrl();
+				if(forwardrequestlist[0])
+					deletefrombuffer(forwardrequestlist[0]->msgsource);
+				flags &= ~FORWARDTASK;
+				dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),forwardreplicacount);
+				forwardreplicacount = 0;
+				call forwardpacketTimer.stop();
+				if(forwardrequestlist[0])
+					updateSet(forwardrequestlist[0]->sourceid, forwardrequestlist[0]->edc, forwardrequestlist[0]->linkq);
+				if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
+					call wakeTimer.stop();
+					if(TOS_NODE_ID !=1){
+						call SeedInit.init((uint16_t)sim_time());
+						call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
+					}
+				}
+			}
+		}
+	}
+
+	event void forwardPauseTimer.fired(){
+			//此处无需考虑节点是否接到过用于消除竞争的duplicate包。既然定时器触发，说明在此时间内无duplicate包
+			forward();
+			call forwardpacketTimer.startPeriodic(PACKET_DUPLICATE_MILLI);
 	}
 }

@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2016, YTC, www.bjfulinux.cn
  Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
- Created on  2016-01-27 13:40
+ Created on  2016-03-29 10:21
  
  @author: ytc recessburton@gmail.com
- @version: 1.1
+ @version: 1.2
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@ implementation {
 	components new TimerMilliC() as wakeTimer;
 	components new TimerMilliC() as sleepTimer;
 	components new TimerMilliC() as forwardpacketTimer;
+	components new TimerMilliC() as forwardPauseTimer;
 	components new AMSenderC(ORWMSG);
 	components new AMReceiverC(ORWMSG);
 	components new AMSenderC(CTRLMSG) as CTRLSender;
@@ -43,6 +44,7 @@ implementation {
 	App.Boot               -> MainC;
 	App.packetTimer        -> packetTimer;
 	App.forwardpacketTimer -> forwardpacketTimer;
+	App.forwardPauseTimer  -> forwardPauseTimer;
 	App.wakeTimer          -> wakeTimer;
 	App.sleepTimer         -> sleepTimer;
 	App.Packet             -> AMSenderC;

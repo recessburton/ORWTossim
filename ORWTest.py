@@ -72,7 +72,7 @@ t.addChannel("Probe", f2)
 t.addChannel("ORWTossimC", f3)
 #t.addChannel("ORWTossimC", sys.stdout)
 t.addChannel("Neighbor", f4)
-t.addChannel("Bootinfo", sys.stdout)
+#t.addChannel("Bootinfo", sys.stdout)
 
 percent = 0
 while (t.time() < emulatetimeseconds * tickspersencond):
