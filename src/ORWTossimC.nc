@@ -100,9 +100,10 @@ implementation {
 			neighborSet[i].use = FALSE;
 		}
 		nodeedc = (TOS_NODE_ID ==1) ? 0.0f : FLT_MAX;
-		//初始化buffer和OCL
+		//初始化buffer、frl和OCL
 		for(i=0;i<MAX_NEIGHBOR_NUM;i++){
 			forwardBuffer[i] = NULL;
+			forwardrequestlist[i] = NULL;
 		}
 		for(i=0;i<MAX_NEIGHBOR_NUM*5;i++){
 			ocl[i].nodeid = -1;
@@ -133,12 +134,47 @@ implementation {
 		dbg("Probe", "Probe Send done.\n");
 	}
 	
+	void addtofrl(const ControlMsg* nbm){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL)
+			i++;
+		if (i>=MAX_NEIGHBOR_NUM)
+			i = MAX_NEIGHBOR_NUM-1;
+		forwardrequestlist[i] = (ControlMsg*)malloc(sizeof(ControlMsg));
+		memcpy(forwardrequestlist[i],nbm,sizeof(ControlMsg));
+	}
+
+	bool checkfrl(){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL){
+			dbg("ORWTossimC", "%s FWDJUDGE %d\n",sim_time_string(),forwardrequestlist[i]->sourceid);
+			i++;
+		}
+		if (i>0)
+			dbg("ORWTossimC", "%s TOTALCOMPETITOR %d\n",sim_time_string(),i);		
+		if (i>1||i==0)
+			return TRUE;
+		else
+			return FALSE;
+	}
+	
+	void clearfrl(){
+		int i=0;
+		while (forwardrequestlist[i]!= NULL){
+				free(forwardrequestlist[i]);
+				forwardrequestlist[i] = NULL;
+				i++;
+		}
+	}
+	
 	void sendMsg() {
 		//周期产生数据包
 		NeighborMsg * btrpkt = NULL;
 		if(msgreplicacount > MAX_REPLICA_COUNT){
 			msgreplicacount = 0;
 			flags &= ~DATATASK;
+			judgement = FALSE;
+			clearfrl();
 			dbg("ORWTossimC", "%s ERROR rechieve_Max_replica\n",sim_time_string());
 			call packetTimer.stop();
 			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
@@ -224,11 +260,11 @@ implementation {
 	}
 
 	event void AMSend.sendDone(message_t * msg, error_t err) {
-		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
+		/*if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
 			call wakeTimer.stop();
 			if(TOS_NODE_ID !=1)
 				call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//重置休眠触发时钟，向后延迟一段时间
-		}
+		}*/
 	}
 	
 	int addtobuffer(const NeighborMsg* neimsg) {
@@ -342,7 +378,7 @@ implementation {
 		btrpkt->linkq = getLinkQ(forwarderid);
 		dbg("ORWTossimC", "%s ACK %d %f\n",sim_time_string(),forwarderid,btrpkt->linkq);
 		call SeedInit.init((uint16_t)sim_time());
-		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
+		RANDOMDELAY(60+((unsigned int)call Random.rand16())%100);
 		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 		forwardpause = TRUE;
 		call forwardPauseTimer.startOneShot(160);
@@ -378,22 +414,32 @@ implementation {
 		//注意，此处与节点邻居表中判断是否use的条件正好相反。（ (neighborSet[i].edc <= (nodeedc - WEIGHT))）
 		return (nodeedc <= (edc - WEIGHT)) ? TRUE : FALSE;
 	}
+	
+	bool neighborMsgCmp(const NeighborMsg* nm1, const NeighborMsg* nm2){
+		if(nm1->forwarderid != nm2->forwarderid)
+			return FALSE;
+		if(nm1->sourceid != nm2->sourceid)
+			return FALSE;
+		if(nm1->index != nm2->index)
+			return FALSE;
+		return TRUE;
+	}
 
 	event message_t * Receive.receive(message_t * msg, void * payload,uint8_t len) {//用于接收上一跳发来的信息，作为下游节点时触发
 		/* 按照不同长度的包区分包的类型，在此处为特例，因为不是所有不同种类的包恰好都有不同的长度。
 		 * 另外，在用sizeof计算结构体长度时，本应注意字节对齐问题，比如第一个成员为uint8_t，第二个成员为uint16_t，则其长度为32
 		 * 但此处用到的是网络类型数据nx_，不存在这种情况，结构体在内存中存储是无空隙的。
 		 * */
-		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&INITIALIZED) != INITIALIZED)){
-			call wakeTimer.stop();
-			if(TOS_NODE_ID !=1){
-				call SeedInit.init((uint16_t)sim_time());
-				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
-			}
-		}
 		if(len == sizeof(ProbeMsg)) {
 			//probe 探测包处理
 			ProbeMsg* btrpkt1 = (ProbeMsg*) payload;
+			/*if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&INITIALIZED) != INITIALIZED)){
+				call wakeTimer.stop();
+				if(TOS_NODE_ID !=1){
+					call SeedInit.init((uint16_t)sim_time());
+					call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
+				}
+			}*/
 			if(btrpkt1->dstid - TOS_NODE_ID == 0) {
 				//接到自己probe包的回包
 				updateSet(btrpkt1->sourceid, btrpkt1->edc, 1.0f);
@@ -440,9 +486,10 @@ implementation {
 			if(!qualify(btrpkt2->edc))	//如果该节点的数据包值不值得被转发
 				return msg;
 			if(((flags&DATATASK) != DATATASK)&&((flags&FORWARDTASK) != FORWARDTASK)) {
-				if (memcmp(duplicatemsg,btrpkt2,sizeof(NeighborMsg))){//头文件中开启了内存字节对齐，否则memcmp会出错！！
+				if (neighborMsgCmp(duplicatemsg,btrpkt2)){//头文件中开启了内存字节对齐，否则memcmp会出错！！
 					//接到完全相同的duplicate包，则说明正在进行forward竞争
 					call forwardPauseTimer.stop();
+					dbg("ORWTossimC", "JUDGING...RESEND ACK\n");
 					sendforwardrequest(btrpkt2->forwarderid,btrpkt2->sourceid);
 					return msg;
 				}else if (forwardpause) //在forwardpause期间接到其它的包，丢弃
@@ -486,43 +533,15 @@ implementation {
 	}
 
 	event void CTRLSender.sendDone(message_t *msg, error_t error){
-		if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
+		/* if(((flags&SLEEPALLOWED) == SLEEPALLOWED) && ((flags&DATATASK)!=DATATASK) && ((flags&FORWARDTASK)!=FORWARDTASK)){
 			call wakeTimer.stop();
 			if(TOS_NODE_ID !=1){
 				call SeedInit.init((uint16_t)sim_time());
 				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
 			}
-		}
+		}*/
 	}
 	
-	void addtofrl(const ControlMsg* nbm){
-		int i=0;
-		while (forwardrequestlist[i]!= NULL)
-			i++;
-		forwardrequestlist[i] = (ControlMsg*)malloc(sizeof(ControlMsg));
-		memcpy(forwardrequestlist,nbm,sizeof(ControlMsg));
-	}
-
-	bool checkfrl(){
-		int i=0;
-		while (forwardrequestlist[i]!= NULL){
-			dbg("ORWTossimC", "%s FWDJUDGE %d\n",sim_time_string(),forwardrequestlist[i]->sourceid);
-			i++;
-		}
-		dbg("ORWTossimC", "%s TOTALCOMPETITOR %d\n",sim_time_string(),i);
-		if (i>1)
-			return TRUE;
-		else
-			return FALSE;
-	}
-	
-	void clearfrl(){
-		int i=0;
-		while (forwardrequestlist[i]!= NULL){
-				free(forwardrequestlist[i]);
-				forwardrequestlist[i] = NULL;
-		}
-	}
 	event message_t * CTRLReceiver.receive(message_t *msg, void *payload, uint8_t len){//用于接收下一跳发来的信息，作为上游节点时触发
 		if(len == sizeof(ControlMsg)){
 			//转发请求控制信息包处理
@@ -530,7 +549,15 @@ implementation {
 			if(btrpkt->forwardcontrol == 0x1){
 				//收到某个转发请求
 				if(btrpkt->dstid - TOS_NODE_ID == 0){
+					dbg("ORWTossimC", "Received ack from %d\n",btrpkt->sourceid);
 					addtofrl(btrpkt);
+					if (btrpkt->sourceid == 1){
+						if((flags&FORWARDTASK) != FORWARDTASK)
+							signal forwardpacketTimer.fired();
+						if((flags&DATATASK) != DATATASK)
+							signal packetTimer.fired();
+					}
+					
 				}
 				return msg;
 			}else{
@@ -550,12 +577,14 @@ implementation {
 				if((flags&FORWARDTASK) != FORWARDTASK){ //若有转发任务则该周期不产生数据
 					if(!judgement){//第一次发送
 						judgement = TRUE;
+						clearfrl();
 						sendMsg();
 					}else{
-						if(checkfrl()){//接收到多个ack，存在竞争
-							sendMsg();
-						}else{//没有竞争
+						if(checkfrl()){//接收到多个ack，存在竞争，或没有收到
 							clearfrl();
+							sendMsg();
+						}else{//没有竞争,被成功转发
+							judgement = FALSE;
 							flags &= ~DATATASK;
 							dbg("ORWTossimC", "%s REPLICA# %d\n",sim_time_string(),msgreplicacount);
 							msgreplicacount = 0;
@@ -564,6 +593,7 @@ implementation {
 							call packetTimer.startOneShot(PACKET_PERIOD_MILLI+((unsigned int)call Random.rand16())/100);
 							if(forwardrequestlist[0])
 								updateSet(forwardrequestlist[0]->sourceid, forwardrequestlist[0]->edc, forwardrequestlist[0]->linkq);
+							clearfrl();
 							if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
 								call wakeTimer.stop();
 								if(TOS_NODE_ID !=1){
@@ -584,12 +614,12 @@ implementation {
 			deletefrombuffer(glbforwardmsgid);
 			flags &= ~FORWARDTASK;
 			dbg("ORWTossimC", "%s ERROR max_replica_#_rechieved\n",sim_time_string());
+			clearfrl();
 			call forwardpacketTimer.stop();
 		}else{
-			if(checkfrl()){//接收到多个ack，存在竞争
+			if(checkfrl()){//接收到多个ack，存在竞争,或没有收到
 				forward();
-			}else{//没有竞争
-				clearfrl();
+			}else{//没有竞争,包被成功转发
 				if(forwardrequestlist[0])
 					deletefrombuffer(forwardrequestlist[0]->msgsource);
 				flags &= ~FORWARDTASK;
@@ -598,6 +628,7 @@ implementation {
 				call forwardpacketTimer.stop();
 				if(forwardrequestlist[0])
 					updateSet(forwardrequestlist[0]->sourceid, forwardrequestlist[0]->edc, forwardrequestlist[0]->linkq);
+				clearfrl();
 				if((flags&SLEEPALLOWED) == SLEEPALLOWED){	
 					call wakeTimer.stop();
 					if(TOS_NODE_ID !=1){

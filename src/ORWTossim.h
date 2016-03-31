@@ -27,16 +27,14 @@ enum {
 	ORWMSG = 11,					//无线信道号，数据包
 	CTRLMSG = 12,                   //无线信道号，控制包
 	MAX_NEIGHBOR_NUM = 20,			//最大邻居数
-	PROBE_PERIOD_MILLI = 426,		//探测包发送间隔
+	PROBE_PERIOD_MILLI = 412,		//探测包发送间隔
 	PACKET_PERIOD_MILLI = 360222,	//数据包产生间隔
-	PACKET_DUPLICATE_MILLI = 100,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则恢复长发包间隔（40）
+	PACKET_DUPLICATE_MILLI = 120,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则恢复长发包间隔（PACKET_PERIOD_MILLI）
 	WAKE_PERIOD_MILLI = 100,		//射频唤醒时长
-	WAKE_DELAY_MILLI = 100,			//有包收到之后延迟休眠的时长
+	WAKE_DELAY_MILLI = 20,			//有包收到之后延迟休眠的时长
 	SLEEP_PERIOD_MILLI = 2048,		//睡眠时长
 	MESSAGE_PRODUCE_RATIO = 10,	//产生数据包的节点比例，即10%
 };
-
-#pragma pack (1) 				//指定按1字节对齐（实际是取消字节对齐）
 
 typedef nx_struct NeighborMsg {
 	nx_uint8_t dstid;			//转发单步中的目标接收节点ID，不是最终目的地（最终目的地都是sink ID=1），局部使用
@@ -69,8 +67,6 @@ typedef struct NeighborSetNode{
 	float p;		//邻居节点属性：与本节点链路质量
 	bool use;		//邻居节点在本节点中表现的属性：是否在本节点转发表中启用
 }NeighborSet;
-
-#pragma pack () 			  //取消指定对齐，恢复缺省对齐
 
 #define WEIGHT 0.1F    	      //计算EDC时的weight值，去文中最好的经验值：0.1
 #define RECEPTALLTHRE 3      //数据包转发请求接受阈值，达到该阈值后，允许一切转发请求（避免多次拒绝不在转发表中的节点，导致网络延迟增加）
