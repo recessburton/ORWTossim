@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2016, YTC, www.bjfulinux.cn
  Copyright (C),2014-2016, ENS Lab, ens.bjfu.edu.cn
- Created on  2016-03-29 10:21
+ Created on  2016-04-06 10:05
  
  @author: ytc recessburton@gmail.com
- @version: 1.2
+ @version: 1.3
  
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -69,7 +69,23 @@ implementation {
 	overheadcountlist ocl[MAX_NEIGHBOR_NUM*5];//overhead计数表，记录overhead到某个节点的次数，用于计算Linkquality
 	
 	ControlMsg *forwardrequestlist[MAX_NEIGHBOR_NUM]; //存放（多个）ack返回者的列表
-
+	//能量模型
+	//参考文献：
+	//Polastre J, Hill J, Culler D. Versatile low power media access for wireless sensor networks[C]//Proceedings of the 2nd international conference on Embedded networked sensor systems. ACM, 2004: 95-107.
+	//表2：I=20mA，T=146*10^-6*18byte/3600s,一次传输能量：E1=IT=4.16e-8Ah.
+	//干电池容量以E2=200mAh计，则最大收发次数：c=E2/E1=4,807,800次
+	int energy=4807800;//最大收发次数
+	inline bool checkenergy(){return energy>0?TRUE:FALSE;}
+	void killnode(){
+		call RadioControl.stop();
+		call wakeTimer.stop();
+		call sleepTimer.stop();
+		call packetTimer.stop();
+		call forwardpacketTimer.stop();
+		call forwardPauseTimer.stop();
+		dbg("ORWTossimC", "%s DIED\n",sim_time_string());
+	}
+	
 /*位运算之掩码使用：
  * 打开位： flags = flags | MASK
  * 关闭位： flags = flags & ~MASK	
@@ -130,7 +146,11 @@ implementation {
 		btrpkt->sourceid = (nx_int8_t)TOS_NODE_ID;
 		btrpkt->edc = 0;
 		btrpkt->linkq = 0;
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
+		if(!checkenergy()){
+			killnode();
+			return;
+		}else
+			call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 		dbg("Probe", "Probe Send done.\n");
 	}
 	
@@ -198,7 +218,11 @@ implementation {
 		btrpkt->forwardingrate = getforwardingrate();
 		btrpkt->index = index;
 		btrpkt->edc=nodeedc;
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
+		if(!checkenergy()){
+			killnode();
+			return;
+		}else
+			call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 		call wakeTimer.stop();	//关闭休眠，等待转发请求
 	}
 	
@@ -265,6 +289,7 @@ implementation {
 			if(TOS_NODE_ID !=1)
 				call wakeTimer.startOneShot(WAKE_DELAY_MILLI);//重置休眠触发时钟，向后延迟一段时间
 		}*/
+		energy--;
 	}
 	
 	int addtobuffer(const NeighborMsg* neimsg) {
@@ -363,7 +388,11 @@ implementation {
 		call SeedInit.init((uint16_t)sim_time());
 		RANDOMDELAY(((unsigned int)call Random.rand16())%100);
 		//dbg("ORWTossimC", ">>>>>>>>>after %ld %s\n",sim_time(),sim_time_string());
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
+		if(!checkenergy()){
+			killnode();
+			return;
+		}else
+			call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(ProbeMsg));
 	}
 	
 	void sendforwardrequest(uint8_t forwarderid, uint8_t msgsource) {
@@ -379,7 +408,11 @@ implementation {
 		dbg("ORWTossimC", "%s ACK %d %f\n",sim_time_string(),forwarderid,btrpkt->linkq);
 		call SeedInit.init((uint16_t)sim_time());
 		RANDOMDELAY(60+((unsigned int)call Random.rand16())%100);
-		call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
+		if(!checkenergy()){
+			killnode();
+			return;
+		}else
+			call CTRLSender.send(AM_BROADCAST_ADDR, &pkt, sizeof(ControlMsg));
 		forwardpause = TRUE;
 		call forwardPauseTimer.startOneShot(160);
 	}
@@ -405,7 +438,11 @@ implementation {
 		}else{
 			;//dbg("ORWTossimC", "%s Reforwarding packet from %d, source:%d, index:%d, fr:%f...\n",sim_time_string(),neimsg->forwarderid, btrpkt->sourceid,btrpkt->index,btrpkt->forwardingrate);
 		}
-		call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
+		if(!checkenergy()){
+			killnode();
+			return;
+		}else
+			call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(NeighborMsg));
 		call wakeTimer.stop();	//停止休眠，等待转发请求
 	}
 	
@@ -430,6 +467,7 @@ implementation {
 		 * 另外，在用sizeof计算结构体长度时，本应注意字节对齐问题，比如第一个成员为uint8_t，第二个成员为uint16_t，则其长度为32
 		 * 但此处用到的是网络类型数据nx_，不存在这种情况，结构体在内存中存储是无空隙的。
 		 * */
+		energy--;
 		if(len == sizeof(ProbeMsg)) {
 			//probe 探测包处理
 			ProbeMsg* btrpkt1 = (ProbeMsg*) payload;
@@ -540,9 +578,11 @@ implementation {
 				call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//重置休眠触发时钟，向后延迟一段时间
 			}
 		}*/
+		energy--;
 	}
 	
 	event message_t * CTRLReceiver.receive(message_t *msg, void *payload, uint8_t len){//用于接收下一跳发来的信息，作为上游节点时触发
+		energy--;
 		if(len == sizeof(ControlMsg)){
 			//转发请求控制信息包处理
 			ControlMsg* btrpkt = (ControlMsg*) payload;
