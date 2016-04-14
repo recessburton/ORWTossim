@@ -74,7 +74,7 @@ implementation {
 	//Polastre J, Hill J, Culler D. Versatile low power media access for wireless sensor networks[C]//Proceedings of the 2nd international conference on Embedded networked sensor systems. ACM, 2004: 95-107.
 	//表2：I=20mA，T=146*10^-6*18byte/3600s,一次传输能量：E1=IT=4.16e-8Ah.
 	//干电池容量以E2=200mAh计，则最大收发次数：c=E2/E1=4,807,800次
-	int energy=4807800;//最大收发次数
+	int energy=5000;//最大收发次数,用于模拟测试
 	inline bool checkenergy(){return energy>0?TRUE:FALSE;}
 	void killnode(){
 		call RadioControl.stop();
@@ -195,7 +195,7 @@ implementation {
 			flags &= ~DATATASK;
 			judgement = FALSE;
 			clearfrl();
-			dbg("ORWTossimC", "%s ERROR rechieve_Max_replica\n",sim_time_string());
+			dbg("ORWTossimC", "%s ERROR reach_Max_replica\n",sim_time_string());
 			call packetTimer.stop();
 			call packetTimer.startOneShot(PACKET_PERIOD_MILLI);
 			return;
@@ -641,6 +641,7 @@ implementation {
 									call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
 								}
 							}
+							dbg("ORWTossimC", "%s ENERGY %d\n",sim_time_string(),energy);
 						}
 					}
 					
@@ -653,7 +654,7 @@ implementation {
 			forwardreplicacount = 0;
 			deletefrombuffer(glbforwardmsgid);
 			flags &= ~FORWARDTASK;
-			dbg("ORWTossimC", "%s ERROR max_replica_#_rechieved\n",sim_time_string());
+			dbg("ORWTossimC", "%s ERROR max_replica_#_reached\n",sim_time_string());
 			clearfrl();
 			call forwardpacketTimer.stop();
 		}else{
@@ -676,6 +677,7 @@ implementation {
 						call wakeTimer.startOneShot(WAKE_DELAY_MILLI+((unsigned int)call Random.rand16())%100);//恢复休眠触发时钟，向后延迟一段时间
 					}
 				}
+				dbg("ORWTossimC", "%s ENERGY %d\n",sim_time_string(),energy);
 			}
 		}
 	}
