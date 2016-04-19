@@ -168,6 +168,8 @@ implementation {
 		int i=0;
 		while (forwardrequestlist[i]!= NULL){
 			dbg("ORWTossimC", "%s FWDJUDGE %d\n",sim_time_string(),forwardrequestlist[i]->sourceid);
+			if(forwardrequestlist[i]->sourceid==0x1)
+				return FALSE;
 			i++;
 		}
 		if (i>0)
@@ -586,7 +588,7 @@ implementation {
 		if(len == sizeof(ControlMsg)){
 			//转发请求控制信息包处理
 			ControlMsg* btrpkt = (ControlMsg*) payload;
-			if(btrpkt->forwardcontrol == 0x1){
+			//if(btrpkt->forwardcontrol == 0x1){	//暂时只有0x1消息类型，此处预留
 				//收到某个转发请求
 				if(btrpkt->dstid - TOS_NODE_ID == 0){
 					dbg("ORWTossimC", "Received ack from %d\n",btrpkt->sourceid);
@@ -600,8 +602,8 @@ implementation {
 					
 				}
 				return msg;
-			}else{
-			}
+			//}else{
+			//}
 			return msg;
 		}
 		return msg;
