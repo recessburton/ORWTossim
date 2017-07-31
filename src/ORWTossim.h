@@ -28,7 +28,7 @@ enum {
 	CTRLMSG = 12,                   //无线信道号，控制包
 	PAYLOAD_PERIOD_MILLI = 360222,	//数据包产生间隔
 	PACKET_DUPLICATE_MILLI = 120,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则恢复长发包间隔（PAYLOAD_PERIOD_MILLI）
-	WAKE_PERIOD_MILLI = 350,		//100射频唤醒时长
+	WAKE_PERIOD_MILLI_BASE = 600,	//射频唤醒时长(随机数基数)600-700，ORW实验固定为650
 	SLEEP_PERIOD_MILLI = 2048,		//睡眠时长
 	PAYLOAD_PRODUCE_RATIO = 5,	    //产生数据包的节点比例，即5%
 };

@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2017, YTC, www.bjfulinux.cn
  Copyright (C),2014-2017, ENS Lab, ens.bjfu.edu.cn
- Created on  2017-07-5 16:37
+ Created on  2017-07-31 16:37
 
  @author: ytc recessburton@gmail.com
- @version: 1.6
+ @version: 1.7
 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -65,6 +65,7 @@ implementation {
 	list_t neighborSet;//NeighborSet 邻居节点集合
 	int forwardreplicacount=0;//转发重复计数
 	int msgreplicacount=0;//数据包发送重复计数
+	int WAKE_PERIOD_MILLI=WAKE_PERIOD_MILLI_BASE;//节点休眠周期
 	message_t pkt;
 	unsigned char flags;//标志位，与掩码运算可知相应位置是否置位
 	volatile float nodeedc;
@@ -78,6 +79,7 @@ implementation {
 	DataPayload * forwardBuffer = NULL;//作为下游节点暂存刚接到拟转发的包
 	uint16_t currentForwardingDsn = 0;//当前正在转发或正在请求中的包识别号
 	int vacantAckOffset = 0;
+	int energy = 0;//节点能耗，每收发一次+1
 
 	list_t ocl;//overheardcountlistnode表，overheard计数表，记录overheard到某个节点的次数以及其中转发的次数，用于计算Linkquality
 
@@ -596,6 +598,7 @@ implementation {
 		flags = ((unsigned int)(call Random.rand16())%100)/PAYLOAD_PRODUCE_RATIO==0 ? (flags | PAYLOADSOURCE) : (flags & ~PAYLOADSOURCE);
 		SETFLAG(flags, SLEEPALLOWED);		//启用休眠机制
 		//UNSETFLAG(flags, SLEEPALLOWED);	//关闭休眠机制
+		WAKE_PERIOD_MILLI = WAKE_PERIOD_MILLI_BASE + (call Random.rand16())%100;//初始化随机休眠周期
 		call RadioControl.start();
 		if(TOS_NODE_ID == 1){
 			SETFLAG(flags, INITIALIZED);	//sink节点一开始就是初始化的
@@ -688,6 +691,9 @@ implementation {
 
 	event void AMSend.sendDone(message_t * msg, error_t err) {
 		int acks=0;
+		energy++;
+		if(energy % 10 == 0)
+			dbg("Radio", "%s ENERGY %d.\n",sim_time_string(), energy);
 		acks = (call ACKs.wasAcked(msg)) - vacantAckOffset;
 		if(acks > 1){
 			//存在多个ack,重新发送数据包来重新发起竞争。(*如果超过最大重复次数，则指定edc最小者转发该数据包。待定)
@@ -875,6 +881,9 @@ implementation {
 		uint8_t forwarderid = getPktMessageSource(msg);
 		DataPayload * btrpkt = (DataPayload *) payload;
 
+		energy++;
+		if(energy % 10 == 0)
+			dbg("Radio", "%s ENERGY %d.\n",sim_time_string(), energy);
 		shouldAck = TRUE;
 		if(len == sizeof(DataPayload)) {
 			{//=====================是否需要回复ack的判断处理，注意，先触发reveive再触发prepareAckAddtionalMsg=========
