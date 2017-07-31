@@ -1,0 +1,4 @@
+#!/bin/bash
+cp ./src/* ./
+cp ./NeighborDiscovery/* ./
+make micaz sim && ./ORWTest.py
