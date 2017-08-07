@@ -577,8 +577,8 @@ implementation {
  		atomic {
 	 		for(i = 0;i<neighborsize;i++){
 				currentedc = FLT_MAX;
+				neighbornode = (NeighborSet*)list_get_at(&neighborSet, i);
 				if(cal){
-					neighbornode = (NeighborSet*)list_get_at(&neighborSet, i);
 					EDCpart1 += neighbornode->p;
 					EDCpart2 += neighbornode->p * neighbornode->edc;
 					assert(EDCpart1 > 0);
