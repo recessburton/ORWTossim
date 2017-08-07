@@ -350,6 +350,13 @@ implementation {
 	 * @see noACK()
 	 */
 	void setVacantAck(message_t* msg);
+	
+	/**
+	 * 更新节点的EDC值.
+	 *
+	 * 根据ORW文中的方式，根据转发集，计算并更新本节点的EDC值.
+	 */
+	void updateEDC();
 
 	/**
 	 * 更新OCL列表.
@@ -557,13 +564,8 @@ implementation {
 		isForwardRequest = TRUE;
 		call forwardPauseTimer.startOneShot(160);
 	}
-
-	/**
-	 * 更新节点的EDC值.
-	 *
-	 * 根据ORW文中的方式，根据转发集，计算并更新本节点的EDC值.
-	 */
-	task void updateEDC(){
+	
+	void updateEDC(){
 		//根据文中的公示计算EDC值
 		int i;
 		float EDCpart1 = 0.0f;
@@ -680,7 +682,7 @@ implementation {
 		list_attributes_comparator(&neighborSet, cmpNeighborSetByEDC);//指定比较函数
 		list_sort(&neighborSet, 1);//从小到大排序
 		if(TOS_NODE_ID != 1)
-			post updateEDC();
+			updateEDC();
 		neighbornode = NULL;
 		return;
 	}
