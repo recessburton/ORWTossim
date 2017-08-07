@@ -1,10 +1,10 @@
 /**
  Copyright (C),2014-2017, YTC, www.bjfulinux.cn
  Copyright (C),2014-2017, ENS Lab, ens.bjfu.edu.cn
- Created on  2017-07-31 16:37
+ Created on  2017-08-07 09:58
 
  @author: ytc recessburton@gmail.com
- @version: 1.7
+ @version: 1.8
 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -568,26 +568,34 @@ implementation {
 		int i;
 		float EDCpart1 = 0.0f;
 		float EDCpart2 = 0.0f;
+		float currentedc = FLT_MAX;
+		int maxForwarderNo = 0;
+		bool cal = TRUE;
 		NeighborSet *neighbornode = NULL;
 		int neighborsize = list_size(&neighborSet);
+		nodeedc = FLT_MAX;
  		atomic {
 	 		for(i = 0;i<neighborsize;i++){
-	 				neighbornode = (NeighborSet*)list_get_at(&neighborSet, i);
-	 				if(!neighbornode->use)		//只在forwarder集中进行
-	 					break;
+				currentedc = FLT_MAX;
+				if(cal){
+					neighbornode = (NeighborSet*)list_get_at(&neighborSet, i);
 					EDCpart1 += neighbornode->p;
 					EDCpart2 += neighbornode->p * neighbornode->edc;
+					assert(EDCpart1 > 0);
+					currentedc = 1.0f/EDCpart1 + EDCpart2/EDCpart1 + WEIGHT;
+				}
+				if(currentedc < (nodeedc - WEIGHT)){
+					nodeedc = currentedc;
+					neighbornode->use = TRUE;
+					maxForwarderNo = i+1;
+				}else{
+					cal = FALSE;
+					neighbornode->use = FALSE;
+				}
+				dbg("Neighbor", "NeighborSet #%d:Node %d, EDC %f, LQ %f, is use:%d\n",i+1,neighbornode->nodeid,neighbornode->edc,neighbornode->p,neighbornode->use);
 			}
-			assert(EDCpart1 > 0);
-			nodeedc = 1.0f/EDCpart1 + EDCpart2/EDCpart1 + WEIGHT;
 		}
-		//打印邻居集，判定forwarderSet资格
-		dbg("Neighbor", "%s The node EDC is %.1f.\n",sim_time_string(),nodeedc);
-		for(i = 0;i<neighborsize;i++){
-			neighbornode = (NeighborSet*)list_get_at(&neighborSet, i);
-			neighbornode->use = (neighbornode->edc <= (nodeedc - WEIGHT)) ? TRUE : FALSE;
-			dbg("Neighbor", "NeighborSet #%d:Node %d, EDC %.1f, LQ %f, is use:%d\n",i+1,neighbornode->nodeid,neighbornode->edc,neighbornode->p,neighbornode->use);
-		}
+		dbg("Neighbor", "%s Node EDC %f, maxForwarderNo %d.\n",sim_time_string(),nodeedc,maxForwarderNo);
 		neighbornode = NULL;
 	}
 
@@ -645,9 +653,6 @@ implementation {
 		return (*(NeighborSet *)a).edc > (*(NeighborSet *)b).edc ? -1 : 1;
 	}
 
-	/*int matchIDinNeighborSet(const void* a, const void* b){
-		return (*(NeighborSet *)a).nodeid == (*(NeighborSet *)b).nodeid ? 0 : 1;
-	}*/
 	int matchIDinNeighborSet(const void *el, const void *indicator){
 		return (*(NeighborSet *)el).nodeid == *(int*)indicator ? 1 : 0;
 	}
@@ -655,28 +660,19 @@ implementation {
 	NeighborSet* findinNeighborSet(uint8_t nodeiduint){
 		NeighborSet *listnode = NULL;
 		int nodeid = (int)nodeiduint;
-		//list_attributes_comparator(&neighborSet, matchIDinNeighborSet);//指定比较函数
 		list_attributes_seeker(&neighborSet, matchIDinNeighborSet);//指定查找匹配函数
-		//listnode = (NeighborSet*)list_get_at(&neighborSet, list_locate(&neighborSet, (int*)&nodeid));
 		listnode = list_seek(&neighborSet, &nodeid);
-		if(listnode)
-			dbg("Neighbor", "%s finding Neighbor set: %d.\n",sim_time_string(),nodeid);
-		else if(listnode == NULL)
-			dbg("Neighbor", "%s not found in Neighbor set: %d.\n",sim_time_string(),nodeid);
 		return listnode;
 	}
 
 	void updateNeighborSet(uint8_t nodeid, float edc, float linkq){
 		NeighborSet* neighbornode = findinNeighborSet(nodeid);
-		dbg("ORWTossimC", "updateNeighborSet\n");
 		if(!neighbornode){
 			if(list_size(&neighborSet)>255)
 				return;
 			neighbornode = (NeighborSet*)malloc(sizeof(NeighborSet));
 			neighbornode->nodeid = nodeid;
-			neighbornode->use = (edc <= (nodeedc - WEIGHT)) ? TRUE : FALSE;
 			list_append(&neighborSet, neighbornode);
-			dbg("Neighbor", "%s Add Neighbor %d.\n",sim_time_string(),nodeid);
 		}
 		neighbornode->edc = edc;
 		neighbornode->p = linkq;
@@ -741,10 +737,6 @@ implementation {
 		return 1;
 	}
 
-	/*int matchIDinOCL(const void *a ,const void *b){
-		//使用simclist库中的比较函数element_comparator，用于在队列里查找
-		return (*(overheardcountlistnode *)a).nodeid == (*(overheardcountlistnode *)b).nodeid ? 0 : 1;
-	}*/
 	int matchIDinOCL(const void *el, const void *indicator){
 		//使用simclist库中的比较函数element_comparator，用于在队列里查找
 		return (*(overheardcountlistnode *)el).nodeid == *(int*)indicator ? 1 : 0;
@@ -753,8 +745,6 @@ implementation {
 	overheardcountlistnode *findinOCL(uint8_t nodeiduint){
 		overheardcountlistnode *listnode = NULL;
 		int nodeid = (int)nodeiduint;
-		//list_attributes_comparator(&ocl, matchIDinOCL);//指定比较函数
-		//listnode = (overheardcountlistnode*)list_get_at(&ocl,list_locate(&ocl, (int*)&nodeid));
 		list_attributes_seeker(&ocl, matchIDinOCL);
 		return list_seek(&ocl, &nodeid);
 	}
@@ -771,11 +761,9 @@ implementation {
 			listnode->overheardcount = 1;
 			listnode->forwardcount = method;
 			list_append(&ocl,listnode);
-			dbg("ORWTossimC", "insert OCL f:%d, o:%d\n",listnode->forwardcount, listnode->overheardcount);
 		} else {//已在OCL表中
 			listnode->overheardcount += (int)(method^1);
 			listnode->forwardcount += method;
-			dbg("ORWTossimC", "update OCL f:%d, o:%d\n",listnode->forwardcount, listnode->overheardcount);
 		}
 	}
 
@@ -785,12 +773,10 @@ implementation {
 		if(TOS_NODE_ID == 1)
 			return 1.0f;
 		if(listnode){
-			dbg("ORWTossimC", "%s linkQ found, f:%d o:%d\n",sim_time_string(),listnode->forwardcount,listnode->overheardcount);
 			if(listnode->overheardcount == 1 && listnode->forwardcount == 0)
 				return 1.0f;
 			return (listnode->forwardcount*1.0f)/(listnode->overheardcount*1.0f);
 		}else{
-			dbg("ORWTossimC", "%s linkQ not found\n",sim_time_string());
 			return 0.0f;
 		}
 	}
@@ -800,7 +786,6 @@ implementation {
 		DataPayload *datatoforward = NULL;
 		message_t* pktp = &pkt;
 		tossim_metadata_t* metadata = getPktMetadata(pktp);
-		dbg("Probe","construct forward ack\n");
 
 		datatoforward = forwardBuffer;
 		if(datatoforward == NULL)
@@ -1003,7 +988,6 @@ implementation {
 		int intlinkq = (int)(linkq*255);
 		intlinkq = intlinkq > 255 ? 255 : intlinkq;
 		intlinkq = intlinkq <= 0 ? 1 : intlinkq;
-		dbg("ORWTossimC","prepare convert linkQ:%f\n", linkq);
 		return (uint8_t)(intlinkq);
 	}
 
@@ -1062,7 +1046,6 @@ implementation {
 		metadata->ackNode = (uint8_t)TOS_NODE_ID;
 		metadata->other1 = convertEdc2uint(nodeedc);
 		metadata->other2 = convertLinkQ2uint(getLinkQ(getPktMessageSource(msg)));
-		dbg("ORWTossimC","prepare ack, linkq:%d\n", metadata->other2);
 		post startForwardRequestPause();
 	}
 
@@ -1082,7 +1065,6 @@ implementation {
 			vacantAckOffset++;
 			return;
 		}
-		dbg("Neighbor", "%s data ack, linkq:%f\n", sim_time_string(), requesterLinkQ);
 		updateNeighborSet(requester, requesterEdc, requesterLinkQ);
 		//收到sink回复的ack
 		if(requester == 1)
