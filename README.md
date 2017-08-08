@@ -19,6 +19,8 @@ Description：
 	ORW 协议的Tossim仿真模拟实现.
 
 Change Log：
+	V1.9 a.调整重传间隔，和新Metric一致
+		 b.更新edc方式从task改成函数，排除异步的问题
 	V1.8 修改EDC计算过程
 	V1.7 增加收发包的总次数计数，以便计算能耗
 	V1.6 修改跳数Bug.

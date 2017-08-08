@@ -27,7 +27,7 @@ enum {
 	DATAPAYLOAD = 11,				//无线信道号，数据包
 	CTRLMSG = 12,                   //无线信道号，控制包
 	PAYLOAD_PERIOD_MILLI = 360222,	//数据包产生间隔
-	PACKET_DUPLICATE_MILLI = 120,	//产生一个数据包后不断发送此包的间隔，直到有节点回复，则恢复长发包间隔（PAYLOAD_PERIOD_MILLI）
+	PACKET_DUPLICATE_MILLI = 290,	//120产生一个数据包后不断发送此包的间隔，直到有节点回复，则恢复长发包间隔（PAYLOAD_PERIOD_MILLI）
 	WAKE_PERIOD_MILLI_BASE = 600,	//射频唤醒时长(随机数基数)600-700，ORW实验固定为650
 	SLEEP_PERIOD_MILLI = 2048,		//睡眠时长
 	PAYLOAD_PRODUCE_RATIO = 5,	    //产生数据包的节点比例，即5%
@@ -53,8 +53,8 @@ typedef struct overheardcountlistnode{
 	int forwardcount;
 }overheardcountlistnode;
 
-#define WEIGHT 0.1F    	     //计算EDC时的weight值，去文中最好的经验值：0.1
-#define MAX_REPLICA_COUNT 20  //最大数据包转发重复计数 3
+#define WEIGHT 0.1F    	     //计算EDC时的weight值，取文中最好的经验值：0.1
+#define MAX_REPLICA_COUNT 10  //最大数据包转发重复计数 10
 
 
 //空转函数，延迟，用于各种包回复前的随机延迟，防止多个节点同时回复一个包，导致干扰.仿照c库delay()函数实现
