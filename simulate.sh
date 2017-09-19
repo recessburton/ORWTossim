@@ -20,7 +20,7 @@ single_sim() {
 }
 cp -r ./src/* ./
 cp -r ./NeighborDiscovery/* ./
-make micaz sim || echo "*** !!! FAILED to built micaz TOSSIM library. Stop simulation!!!***";exit 1
+make micaz sim || (echo "*** !!! FAILED to built micaz TOSSIM library. Stop simulation!!!***";exit 1)
 export -f single_sim
 #paralle 并行工具。 -N1 每次读取1个参数， --jobs 0 尽可能多的并行执行任务 {1..10}参数1~10,10为仿真次数
 parallel -N1 --jobs 0 single_sim ::: {1..4}
