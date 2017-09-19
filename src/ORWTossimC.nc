@@ -608,7 +608,7 @@ implementation {
 		flags = ((unsigned int)(call Random.rand16())%100)/PAYLOAD_PRODUCE_RATIO==0 ? (flags | PAYLOADSOURCE) : (flags & ~PAYLOADSOURCE);
 		SETFLAG(flags, SLEEPALLOWED);		//启用休眠机制
 		//UNSETFLAG(flags, SLEEPALLOWED);	//关闭休眠机制
-		WAKE_PERIOD_MILLI = WAKE_PERIOD_MILLI_BASE + (call Random.rand16())%100;//初始化随机休眠周期
+		WAKE_PERIOD_MILLI = WAKE_PERIOD_MILLI_BASE + (unsigned int)(call Random.rand16())%100;//初始化随机休眠周期
 		call RadioControl.start();
 		if(TOS_NODE_ID == 1){
 			SETFLAG(flags, INITIALIZED);	//sink节点一开始就是初始化的
